@@ -2,3 +2,5 @@
 data
 converted_checkpoints
 node_modules
+
+*.pyc
