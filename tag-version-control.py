@@ -5,6 +5,7 @@ import hashlib
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 from tqdm import tqdm
+from collections import Counter
 
 class CaptionVersionControl:
     def __init__(self, db_path="caption_versions.db"):
@@ -18,6 +19,7 @@ class CaptionVersionControl:
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS caption_versions (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    file_name TEXT,
                     file_path TEXT,
                     content TEXT,
                     content_hash TEXT,
@@ -27,8 +29,8 @@ class CaptionVersionControl:
                 )
             ''')
             conn.execute('''
-                CREATE INDEX IF NOT EXISTS idx_file_path
-                ON caption_versions(file_path)
+                CREATE INDEX IF NOT EXISTS idx_file_name
+                ON caption_versions(file_name)
             ''')
             conn.execute('''
                 CREATE INDEX IF NOT EXISTS idx_timestamp
@@ -39,7 +41,7 @@ class CaptionVersionControl:
         """Calculate SHA-256 hash of content for efficient comparison."""
         return hashlib.sha256(content.encode()).hexdigest()
 
-    def bulk_add_versions(self, file_paths: List[str], comment: str = "") -> Tuple[int, int]:
+    def bulk_add_versions(self, file_paths: List[Path], comment: str = "") -> Tuple[int, int]:
         """
         Add multiple caption files to version control.
 
@@ -51,12 +53,19 @@ class CaptionVersionControl:
 
         # First, read all files and calculate hashes
         file_contents: Dict[str, Tuple[str, str]] = {}
+        names = [p.name for p in file_paths]
+
+        # Ensure all names unique
+        c = Counter(names)
+        dups = {name: count for name, count in c.items() if count > 1}
+        if dups:
+            raise LookupError("Error: Duplicate file names found", dups)
 
         for file_path in tqdm(file_paths, desc="Reading files"):
             try:
                 with open(file_path, 'r', encoding='utf-8') as f:
                     content = f.read()
-                file_contents[file_path] = (content, self.calculate_hash(content))
+                file_contents[str(file_path)] = (content, self.calculate_hash(content))
             except Exception as e:
                 print(f"Error reading {file_path}: {e}")
                 continue
@@ -68,13 +77,13 @@ class CaptionVersionControl:
             # Get current versions for all files
             placeholders = ','.join('?' * len(file_contents))
             cursor.execute(f'''
-                SELECT file_path, content_hash, version
+                SELECT file_name, content_hash, version
                 FROM caption_versions
-                WHERE file_path IN ({placeholders})
+                WHERE file_name IN ({placeholders})
                 AND version = (
                     SELECT MAX(version)
                     FROM caption_versions AS v2
-                    WHERE v2.file_path = caption_versions.file_path
+                    WHERE v2.file_name = caption_versions.file_name
                 )
             ''', list(file_contents.keys()))
 
@@ -88,6 +97,7 @@ class CaptionVersionControl:
                 current = current_versions.get(file_path, (None, 0))
                 if current[0] != content_hash:  # New content
                     values.append((
+                        os.path.basename(file_path),
                         file_path,
                         content,
                         content_hash,
@@ -102,16 +112,16 @@ class CaptionVersionControl:
             if values:
                 cursor.executemany('''
                     INSERT INTO caption_versions
-                    (file_path, content, content_hash, timestamp, version, comment)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    (file_name, file_path, content, content_hash, timestamp, version, comment)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                 ''', values)
 
             conn.commit()
 
         return added, skipped
 
-    def bulk_restore_versions(self, file_paths: List[str],
-                            versions: Optional[Dict[str, int]] = None,
+    def bulk_restore_versions(self, file_paths: List[Path],
+                            version: Optional[int] = None,
                             timestamp: Optional[str] = None) -> Dict[str, bool]:
         """
         Restore multiple files to specific versions or to their state at a given timestamp.
@@ -128,37 +138,38 @@ class CaptionVersionControl:
 
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
+            print(type(file_paths[0]))
 
             for file_path in tqdm(file_paths, desc="Restoring files"):
                 try:
-                    if versions and file_path in versions:
+                    file_name = file_path.name
+                    if version:
                         # Restore specific version
                         cursor.execute('''
                             SELECT content
                             FROM caption_versions
-                            WHERE file_path = ? AND version = ?
-                        ''', (file_path, versions[file_path]))
+                            WHERE file_name = ? AND version = ?
+                        ''', (file_name, version))
                     elif timestamp:
                         # Restore version at timestamp
                         cursor.execute('''
                             SELECT content
                             FROM caption_versions
-                            WHERE file_path = ?
+                            WHERE file_name = ?
                             AND timestamp <= ?
                             ORDER BY timestamp DESC LIMIT 1
-                        ''', (file_path, timestamp))
+                        ''', (file_name, timestamp))
                     else:
                         # Restore latest version
                         cursor.execute('''
                             SELECT content
                             FROM caption_versions
-                            WHERE file_path = ?
+                            WHERE file_name = ?
                             ORDER BY version DESC LIMIT 1
-                        ''', (file_path,))
+                        ''', (file_name,))
 
                     result = cursor.fetchone()
                     if result:
-                        os.makedirs(os.path.dirname(file_path), exist_ok=True)
                         with open(file_path, 'w', encoding='utf-8') as f:
                             f.write(result[0])
                         results[file_path] = True
@@ -178,9 +189,9 @@ class CaptionVersionControl:
             cursor = conn.cursor()
             placeholders = ','.join('?' * len(file_paths))
             cursor.execute(f'''
-                SELECT file_path, version, timestamp, comment, content
+                SELECT file_name, file_path, version, timestamp, comment, content
                 FROM caption_versions
-                WHERE file_path IN ({placeholders})
+                WHERE file_name IN ({placeholders})
                 ORDER BY file_path, version DESC
             ''', file_paths)
 
@@ -192,10 +203,10 @@ class CaptionVersionControl:
 
         return results
 
-    def scan_and_add_captions(self, root_folder: str, comment: str = "") -> Tuple[int, int]:
+    def scan_and_add_captions(self, root_folder: Path, comment: str = "") -> Tuple[int, int]:
         """Recursively scan a folder and add all caption files to version control."""
-        file_paths = list(Path(root_folder).rglob("*.txt"))
-        return self.bulk_add_versions([str(p) for p in file_paths], comment)
+        file_paths = list(root_folder.rglob("*.txt"))
+        return self.bulk_add_versions(file_paths, comment)
 
 def main():
     """Command-line interface for caption version control."""
@@ -220,6 +231,9 @@ Examples:
 
   # Restore files to their state at a specific time
   python script.py restore /path/to/file1.txt --timestamp "2024-03-15T12:00:00"
+
+  # Typical usage
+  python tag-version-control.py add /mnt/d/Sync_AI/Training/[subject]/Images --comment "Before refactor"
         """
     )
 
@@ -250,21 +264,22 @@ Examples:
         parser.print_help()
         return
 
-    vc = CaptionVersionControl()
+    #TODO Custom database path
+    vc = CaptionVersionControl('bats_caption_versions.db')
 
     try:
         if args.command == 'add':
             path = Path(args.path)
             if path.is_file():
-                added, skipped = vc.bulk_add_versions([str(path)], args.comment)
+                added, skipped = vc.bulk_add_versions([path], args.comment)
                 print(f"Added {added} files, skipped {skipped} unchanged files")
             elif path.is_dir():
                 if args.no_recurse:
-                    files = [str(f) for f in path.glob("*.txt")]
+                    files = [f for f in path.glob("**/*.txt")]
                     added, skipped = vc.bulk_add_versions(files, args.comment)
                 else:
                     # Only add .txt files in the root directory
-                    added, skipped = vc.scan_and_add_captions(str(path), args.comment)
+                    added, skipped = vc.scan_and_add_captions(path, args.comment)
                 print(f"Added {added} files, skipped {skipped} unchanged files")
             else:
                 print(f"Error: Path '{args.path}' does not exist")
@@ -280,13 +295,18 @@ Examples:
                     print(f"  Version {version:2d} - {timestamp} - {comment or 'No comment'}")
 
         elif args.command == 'restore':
+            print("WARNING: COMMAND IS UNSAFE AND DOES NOT CHECK DUPLICATES. USE WITH CAUTION")
+            files = [Path(file) for file in args.files]
+            if len(files) == 1 and files[0].is_dir():
+                print("GLOBBIN")
+                print(files[0])
+                files = [f for f in files[0].glob("**/*.txt")]
+            print(files)
             if args.version is not None:
-                # Restore specific version for all files
-                versions = {file: args.version for file in args.files}
-                results = vc.bulk_restore_versions(args.files, versions=versions)
+                results = vc.bulk_restore_versions(files, version=args.version)
             else:
                 # Restore to timestamp or latest version
-                results = vc.bulk_restore_versions(args.files, timestamp=args.timestamp)
+                results = vc.bulk_restore_versions(files, timestamp=args.timestamp)
 
             for file_path, success in results.items():
                 status = "Success" if success else "Failed"
@@ -296,6 +316,8 @@ Examples:
                 print(f"Restored {file_path} to {version_info}: {status}")
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         print(f"Error: {e}")
 
 if __name__ == "__main__":
