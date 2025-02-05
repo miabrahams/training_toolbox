@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"strconv"
-	"strings"
 )
 
 func ExtractTextChunks(filename string) (map[string]string, error) {
@@ -56,22 +54,6 @@ func ExtractTextChunks(filename string) (map[string]string, error) {
 		return result, nil
 	}
 	return nil, fmt.Errorf("no tEXt chunks found")
-}
-
-// UnescapeJSON removes escape sequences from a JSON string extracted from a tEXt chunk.
-// It wraps the string in quotes and uses strconv.Unquote.
-func UnescapeJSON(data string) (string, error) {
-	// By wrapping data in quotes, Unquote will convert escaped sequences.
-	unescaped, err := strconv.Unquote(data)
-	if err != nil {
-		return "", fmt.Errorf("failed to unescape JSON: %w", err)
-	}
-	return unescaped, nil
-}
-
-func UnescapeStrJank(data string) string {
-	// Just replace `\"` with `"` and `\\` with `\`
-	return strings.ReplaceAll(data, "\n", "")
 }
 
 // ParseChunkJSON unescapes the given chunk content and parses the result as JSON.

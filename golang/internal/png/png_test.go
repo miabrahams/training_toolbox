@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"training_toolbox/png"
+	"training_toolbox/internal/png"
 
 	"github.com/stretchr/testify/require"
 )
