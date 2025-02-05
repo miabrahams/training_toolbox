@@ -2,14 +2,13 @@ package parser
 
 import (
 	"fmt"
-	"training_toolbox/internal/png"
 )
 
 type Prompt map[string]any
 
 func ParseChunk(chunk string) (Prompt, error) {
 	// Parse the JSON content of the prompt.
-	parsed, err := png.ParseChunkJSON(chunk)
+	parsed, err := ParseChunkJSON(chunk)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse chunk JSON: %w", err)
 	}
@@ -19,7 +18,7 @@ func ParseChunk(chunk string) (Prompt, error) {
 
 func ExtractFileChunks(filepath string) (string, string, error) {
 	// Extract the tEXt chunks.
-	chunks, err := png.ExtractTextChunks(filepath)
+	chunks, err := ExtractTextChunks(filepath)
 	if err != nil {
 		return "", "", fmt.Errorf("error extracting chunks: %w", err)
 	}

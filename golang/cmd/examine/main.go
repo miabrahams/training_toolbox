@@ -62,3 +62,5 @@ func examineDatabase(dbpath string) error {
 		return nil
 	})
 }
+
+func standardWF(workflow parser.Prompt)

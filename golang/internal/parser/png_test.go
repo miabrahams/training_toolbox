@@ -1,10 +1,9 @@
-package png_test
+package parser_test
 
 import (
 	"path/filepath"
 	"testing"
-
-	"training_toolbox/internal/png"
+	"training_toolbox/internal/parser"
 
 	"github.com/stretchr/testify/require"
 )
@@ -14,7 +13,7 @@ func TestExtractChunk(t *testing.T) {
 	testFile := filepath.Join("data", "sample.png")
 
 	// Call the function to extract the chunk.
-	chunks, err := png.ExtractTextChunks(testFile)
+	chunks, err := parser.ExtractTextChunks(testFile)
 	require.NoError(t, err)
 	require.Len(t, chunks, 2)
 
@@ -25,7 +24,7 @@ func TestExtractChunk(t *testing.T) {
 	prompt_raw := chunks["prompt"]
 	require.NotEmpty(t, prompt_raw)
 
-	prompt, err := png.ParseChunkJSON(prompt_raw)
+	prompt, err := parser.ParseChunkJSON(prompt_raw)
 	require.NoError(t, err)
 	require.NotEmpty(t, prompt)
 }

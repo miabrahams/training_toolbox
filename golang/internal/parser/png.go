@@ -1,4 +1,4 @@
-package png
+package parser
 
 import (
 	"bytes"
@@ -58,7 +58,7 @@ func ExtractTextChunks(filename string) (map[string]string, error) {
 
 // ParseChunkJSON unescapes the given chunk content and parses the result as JSON.
 // It returns the JSON data as a map.
-func ParseChunkJSON(data string) (map[string]any, error) {
+func ParseChunkJSON(data string) (Prompt, error) {
 	var result map[string]interface{}
 	if err := json.Unmarshal([]byte(data), &result); err != nil {
 		return nil, fmt.Errorf("failed to parse JSON: %w", err)
