@@ -7,7 +7,9 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 
 	"training_toolbox/internal/parser"
 
@@ -38,7 +40,7 @@ func run() error {
 	if *file != "" {
 		return parseFileCommand(*file)
 	}
-	return parseDirectory(*dir)
+	return parseDirectoryCommand(*dir)
 }
 
 func parseFileCommand(file string) error {
@@ -52,8 +54,7 @@ func parseFileCommand(file string) error {
 	return nil
 }
 
-func parseDirectory(root string) error {
-	// First pass: collect all PNG file paths.
+func getPngPaths(root string) ([]string, error) {
 	var paths []string
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -68,13 +69,28 @@ func parseDirectory(root string) error {
 		return nil
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	total := len(paths)
 	if total == 0 {
-		fmt.Println("No PNG files found.")
-		return nil
+		return nil, fmt.Errorf("No PNG files found.")
+	}
+	return paths, nil
+}
+
+type fileResult struct {
+	path     string
+	prompt   string
+	workflow string
+	err      error
+}
+
+func parseDirectoryCommand(root string) error {
+
+	paths, err := getPngPaths(root)
+	if err != nil {
+		return fmt.Errorf("error getting PNG paths: %w", err)
 	}
 
 	// Create (or open) the sqlite DB at the root.
@@ -96,27 +112,50 @@ func parseDirectory(root string) error {
 		return fmt.Errorf("failed to create table: %w", err)
 	}
 
-	// Second pass: process each file.
-	processed := 0
-	for _, path := range paths {
-		prompt, workflow, err := parser.ParseFile(path)
-		processed++
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "\nError processing %s: %v\n", path, err)
-			continue
-		}
+	numWorkers := runtime.NumCPU()
+	filesCh := make(chan string)
+	resultsCh := make(chan fileResult)
 
-		// Upsert into the sqlite DB.
-		if _, err := db.Exec(
-			"REPLACE INTO prompts(file_path, prompt, workflow) VALUES(?, ?, ?)",
-			path, prompt, workflow); err != nil {
-			fmt.Fprintf(os.Stderr, "\nDB insertion error for %s: %v\n", path, err)
-			continue
+	var wg sync.WaitGroup
+	worker := func() {
+		defer wg.Done()
+		for path := range filesCh {
+			prompt, workflow, err := parser.ParseFile(path)
+			resultsCh <- fileResult{path, prompt, workflow, err}
 		}
-
-		// Display progress.
-		fmt.Printf("\rProcessed %d/%d files", processed, total)
 	}
-	fmt.Println("\nProcessing complete.")
+	wg.Add(numWorkers)
+	for i := 0; i < numWorkers; i++ {
+		go worker()
+	}
+
+	go func() {
+		for _, p := range paths {
+			filesCh <- p
+		}
+		close(filesCh)
+	}()
+
+	go func() {
+		wg.Wait()
+		close(resultsCh)
+	}()
+
+	processed := 0
+	for res := range resultsCh {
+		processed++
+		if res.err != nil {
+			fmt.Fprintf(os.Stderr, "\n\nerror processing %s: %v\n\n", res.path, res.err)
+		} else {
+			if _, err := db.Exec("INSERT OR REPLACE INTO prompts (file_path, prompt, workflow) VALUES (?, ?, ?)", res.path, res.prompt, res.workflow); err != nil {
+				fmt.Fprintf(os.Stderr, "\n\nfailed to insert into db: %v\n\n", err)
+			}
+		}
+		// Update progress
+		fmt.Printf("\rProcessed %d/%d files", processed, len(paths))
+	}
+
+	fmt.Println("\nDone.")
 	return nil
+
 }
