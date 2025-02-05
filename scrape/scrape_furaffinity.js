@@ -3,10 +3,8 @@ import { readFileSync, writeFile } from 'fs';
 import puppeteer from 'puppeteer';
 
 const cookies = JSON.parse(readFileSync('cookies/www.furaffinity.net.cookies.json', 'utf8'));
-// const target = 'https://www.furaffinity.net/gallery/foxyguts/';
-// const out = 'scrape/foxyguts.json';
 
-const target = 'https://www.furaffinity.net/gallery/claweddays/';
+const target = 'https://www.furaffinity.net/gallery/honovy/';
 const out = 'scrape/claweddays.json';
 
 

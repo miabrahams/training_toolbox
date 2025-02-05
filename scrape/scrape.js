@@ -9,7 +9,7 @@ import puppeteer from 'puppeteer';
 // FA
 const fa_options = {
     cookies_file: "www.furaffinity.net.cookies.json",
-    target_url: "https://www.furaffinity.net/gallery/claweddays/",
+    target_url: "https://www.furaffinity.net/gallery/honovy/",
     output: "claweddays.json"
 }
 const fa_selector = '#gallery-gallery > figure > p:nth-child(1) > a'
@@ -46,9 +46,8 @@ async function sd_labelVisitor(page, url) {
 
 
 // Aryion
-
 async function ar_pageVisitor(page, url) {
-  return await page.$$eval('div.post', (posts) =>
+  const data = await page.$$eval('div.post', (posts) =>
     posts.map((post) => {
       return {
         author: post.querySelector('.author strong').innerText,
@@ -57,49 +56,40 @@ async function ar_pageVisitor(page, url) {
       };
     })
   );
+
+  const pageNumber = await page.$eval('.pagination strong', a => a.innerText);
+  return {pageNumber, url, data};
 }
 
-async function ar_labelVisitor(page, url, pageData, allData) {
-  // Just '1'
-  const pageNumber = page.$eval('.pagination strong').innerText;
-  const pageLabel = `page${pageNumber}`
-  allData[pageLabel] = pageData;
-}
-
-
-async function ar_itemVisitor(page, link, textData, currentUrl = null) {
-  return null;
-}
-
-const ar_nextLinkSelector = 'div.pagination > span > a:nth-of-type(1)';
+const ar_nextLinkSelector = 'div.pagination > span > strong + .page-sep + a';
 
 const config = {
-  cookies_file: null,
-  target_url: "https://aryion.com/forum/viewtopic.php?f=18&t=457",
-  output: "aryion.json",
-  max_pages: 1,
-  labelVisitor: ar_labelVisitor,
+  cookiesFile: null,
+  targetUrl: "https://aryion.com/forum/viewtopic.php?f=18&t=457",
+  outputName: "aryion2.json",
+  maxPages: 570,
   pageVisitor: ar_pageVisitor,
   nextLinkSelector: ar_nextLinkSelector,
-  itemVisitor: ar_itemVisitor
+  itemVisitor: null,
+  append: false
 };
 
 
-// pageVisitor: Given current page, return an array of objects containing target data.
-// labelVisitor: Store data from current page into the output data object. Could look up page num, URL, etc
+// pageVisitor: Given current page, return a data object to store in output array. Could also store page URL, etc if need be.
 // itemVisitor: do something on each data item. Not necessary for eg forum threads.
 
 
 
 (async () => {
-  const {target_url, maxPages, pageVisitor, labelVisitor, nextLinkSelector, itemVisitor, cookies_file} = config;
+  const {targetUrl, maxPages, pageVisitor, nextLinkSelector, itemVisitor, cookiesFile, outputName, append} = config;
 
   let cookies = null;
-  if (cookies_file) {
-    cookies = await fsPromises.readFile(`data/cookies/${config.cookies_file}`).then(JSON.parse);
+  if (cookiesFile) {
+    cookies = await fsPromises.readFile(`data/cookies/${config.cookiesFile}`).then(JSON.parse);
   }
 
 
+  console.log("Starting")
   const browser = await puppeteer.launch();
   const page = await browser.newPage();
   if (cookies) { await page.setCookie(...cookies); }
@@ -107,16 +97,18 @@ const config = {
 
 
   // Use existing file
-  const outfile = `data/scrape/${config.output}`
-  let data;
-  try {
-    data = await fs.promises.readFile(outfile, 'utf8').then(JSON.parse);
-  }
-  catch (err) {
-    console.log('No existing data found. Creating new file.');
-    data = {};
-  }
+  const outFile = `data/scrape/${outputName}`;
+  let data = [];
 
+  if (append) {
+    console.log("Looking for existing data.");
+    try {
+      data = await fs.promises.readFile(outfile, 'utf8').then(JSON.parse);
+    }
+    catch (err) {
+      console.log('No existing data found. Creating new file.');
+    }
+  }
 
 
   // Disable image loading
@@ -126,39 +118,39 @@ const config = {
 
 
   // Start here
-  let currentUrl = target_url;
+  let currentUrl = targetUrl;
 
 
   for (let pageCount = 0; pageCount < maxPages; pageCount++) {
-    if (!currentUrl) break;
-    await page.goto(currentUrl);
-    console.log(`Loaded page ${pageCount}/${maxPages} - ${currentUrl}`);
-    let pageData = await pageVisitor(page);
-    await labelVisitor(page, currentUrl, data);
+    if (currentUrl === null) {
+      console.log("Done.");
+      break;
+    }
 
-    // Find next page
-    currentUrl = await page.$eval(nextLinkSelector, el => el.href);
+    try {
+      await page.goto(currentUrl);
+      console.log(`Loaded page ${pageCount}/${maxPages} - ${currentUrl}`);
+      const pageData = await pageVisitor(page, currentUrl);
+      data.push(pageData);
+      currentUrl = await page.$eval(nextLinkSelector, el => el.href);
+    }
+    catch (err) {
+      console.error("Error: ", err);
+      currentUrl = null;
+    }
   }
 
-
-
-  /* TODO: Visit each link individually (For gallery scraping)
-  for (const i in links) {
-    console.log(`Visiting link ${i}/${links.length}`);
-    visitor(links[i], textData);
-  }
-  */
 
   await browser.close();
 
   try {
     await fsPromises.writeFile(
-      outfile,
+      outFile,
       JSON.stringify(data, null, '  ')
     );
+    console.log("Done.")
   } catch (err) {
-    console.log('The file could not be written.', err);
+    console.error('The file could not be written.', err);
+    print(JSON.stringify(data));
   }
-
-  console.log('Done.');
 })();
