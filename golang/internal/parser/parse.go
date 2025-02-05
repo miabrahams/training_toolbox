@@ -17,20 +17,7 @@ func ParseChunk(chunk string) (Prompt, error) {
 	return parsed, nil
 }
 
-/*
-
-	prompt, err := ParseChunk(promptRaw)
-	if err != nil {
-		return "", "", fmt.Errorf("error parsing 'prompt' chunk: %w", err)
-	}
-
-	workflow, err := ParseChunk(workflowRaw)
-	if err != nil {
-		return "", "", fmt.Errorf("error parsing 'prompt' chunk: %w", err)
-	}
-*/
-
-func ParseFile(filepath string) (string, string, error) {
+func ExtractFileChunks(filepath string) (string, string, error) {
 	// Extract the tEXt chunks.
 	chunks, err := png.ExtractTextChunks(filepath)
 	if err != nil {

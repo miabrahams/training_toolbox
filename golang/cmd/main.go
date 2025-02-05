@@ -48,7 +48,7 @@ func run() error {
 }
 
 func parseFileCommand(file string) error {
-	prompt, workflow, err := parser.ParseFile(file)
+	prompt, workflow, err := parser.ExtractFileChunks(file)
 	if err != nil {
 		return fmt.Errorf("error parsing file: %w", err)
 	}
@@ -116,6 +116,11 @@ func parseDirectoryCommand(root string) error {
 		return fmt.Errorf("failed to create table: %w", err)
 	}
 
+	return parseDirectory(paths, db)
+}
+
+func parseDirectory(paths []string, db *sql.DB) error {
+
 	numWorkers := runtime.NumCPU()
 	filesCh := make(chan string)
 	resultsCh := make(chan fileResult)
@@ -124,7 +129,7 @@ func parseDirectoryCommand(root string) error {
 	worker := func() {
 		defer wg.Done()
 		for path := range filesCh {
-			prompt, workflow, err := parser.ParseFile(path)
+			prompt, workflow, err := parser.ExtractFileChunks(path)
 			resultsCh <- fileResult{path, prompt, workflow, err}
 		}
 	}
