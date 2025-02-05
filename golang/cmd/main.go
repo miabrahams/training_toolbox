@@ -23,6 +23,10 @@ func main() {
 	}
 }
 
+const (
+	batchSize = 25
+)
+
 func run() error {
 	file := flag.String("file", "", "Path to a PNG file")
 	dir := flag.String("dir", "", "Path to a directory containing PNG files")
@@ -141,18 +145,43 @@ func parseDirectoryCommand(root string) error {
 		close(resultsCh)
 	}()
 
+	insertBatch := func(batch []fileResult) error {
+		valueStrings := make([]string, 0, len(batch))
+		valueArgs := make([]interface{}, 0, len(batch)*3)
+		for _, item := range batch {
+			valueStrings = append(valueStrings, "(?, ?, ?)")
+			valueArgs = append(valueArgs, item.path)
+			valueArgs = append(valueArgs, item.prompt)
+			valueArgs = append(valueArgs, item.workflow)
+		}
+		stmt := fmt.Sprintf("INSERT OR REPLACE INTO prompts (file_path, prompt, workflow) VALUES %s", strings.Join(valueStrings, ","))
+		_, err := db.Exec(stmt, valueArgs...)
+		return err
+	}
+
 	processed := 0
+	batch := make([]fileResult, 0, batchSize)
 	for res := range resultsCh {
 		processed++
 		if res.err != nil {
 			fmt.Fprintf(os.Stderr, "\n\nerror processing %s: %v\n\n", res.path, res.err)
-		} else {
-			if _, err := db.Exec("INSERT OR REPLACE INTO prompts (file_path, prompt, workflow) VALUES (?, ?, ?)", res.path, res.prompt, res.workflow); err != nil {
-				fmt.Fprintf(os.Stderr, "\n\nfailed to insert into db: %v\n\n", err)
+		}
+
+		batch = append(batch, res)
+		if len(batch) >= batchSize {
+			if err := insertBatch(batch); err != nil {
+				fmt.Fprintf(os.Stderr, "\n\nfailed to insert batch into db: %v\n\n", err)
 			}
+			batch = batch[:0]
 		}
 		// Update progress
 		fmt.Printf("\rProcessed %d/%d files", processed, len(paths))
+	}
+
+	if len(batch) > 0 {
+		if err := insertBatch(batch); err != nil {
+			fmt.Fprintf(os.Stderr, "\n\nfailed to insert batch into db: %v\n\n", err)
+		}
 	}
 
 	fmt.Println("\nDone.")
