@@ -1,13 +1,17 @@
 package main
 
 import (
+	"database/sql"
 	"flag"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+
 	"training_toolbox/internal/parser"
+
+	_ "github.com/mattn/go-sqlite3"
 )
 
 func main() {
@@ -22,21 +26,19 @@ func run() error {
 	dir := flag.String("dir", "", "Path to a directory containing PNG files")
 	flag.Parse()
 
-	if flag.NFlag() == 0 || flag.NFlag() > 1 {
+	if *file == "" && *dir == "" {
 		flag.Usage()
 		return fmt.Errorf("missing file or directory")
 	}
-
-	if dir != nil {
-		return parseDirectory(*dir)
+	if *file != "" && *dir != "" {
+		flag.Usage()
+		return fmt.Errorf("please provide either a file or directory, not both")
 	}
 
-	if file != nil {
+	if *file != "" {
 		return parseFileCommand(*file)
 	}
-
-	flag.Usage()
-	return nil
+	return parseDirectory(*dir)
 }
 
 func parseFileCommand(file string) error {
@@ -50,27 +52,71 @@ func parseFileCommand(file string) error {
 	return nil
 }
 
-func parseDirectory(dir string) error {
-	return filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+func parseDirectory(root string) error {
+	// First pass: collect all PNG file paths.
+	var paths []string
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if d.IsDir() {
 			return nil
 		}
-		// Process only .png files.
 		if strings.HasSuffix(strings.ToLower(d.Name()), ".png") {
-			fmt.Printf("Processing %s\n", path)
-			// addFileToSqlite is unimplemented.
-			if err := addFileToSqlite(path); err != nil {
-				fmt.Fprintf(os.Stderr, "Error processing %s: %v\n", path, err)
-			}
+			paths = append(paths, path)
 		}
 		return nil
 	})
-}
+	if err != nil {
+		return err
+	}
 
-func addFileToSqlite(filepath string) error {
-	fmt.Printf("parseFile2 not implemented for %s\n", filepath)
+	total := len(paths)
+	if total == 0 {
+		fmt.Println("No PNG files found.")
+		return nil
+	}
+
+	// Create (or open) the sqlite DB at the root.
+	dbPath := filepath.Join(root, "prompts.sqlite")
+	db, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		return fmt.Errorf("failed to open sqlite db: %w", err)
+	}
+	defer db.Close()
+
+	// Create table if not exists.
+	createTable := `
+    CREATE TABLE IF NOT EXISTS prompts (
+        file_path TEXT PRIMARY KEY,
+        prompt TEXT,
+        workflow TEXT
+    );`
+	if _, err := db.Exec(createTable); err != nil {
+		return fmt.Errorf("failed to create table: %w", err)
+	}
+
+	// Second pass: process each file.
+	processed := 0
+	for _, path := range paths {
+		prompt, workflow, err := parser.ParseFile(path)
+		processed++
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "\nError processing %s: %v\n", path, err)
+			continue
+		}
+
+		// Upsert into the sqlite DB.
+		if _, err := db.Exec(
+			"REPLACE INTO prompts(file_path, prompt, workflow) VALUES(?, ?, ?)",
+			path, prompt, workflow); err != nil {
+			fmt.Fprintf(os.Stderr, "\nDB insertion error for %s: %v\n", path, err)
+			continue
+		}
+
+		// Display progress.
+		fmt.Printf("\rProcessed %d/%d files", processed, total)
+	}
+	fmt.Println("\nProcessing complete.")
 	return nil
 }
