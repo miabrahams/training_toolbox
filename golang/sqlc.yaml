@@ -1,0 +1,9 @@
+version: "2"
+sql:
+  - engine: "sqlite"
+    schema: "./internal/sql/schema.sql"
+    queries: "./internal/sql/queries/"
+    gen:
+      go:
+        package: "prompts"
+        out: "./internal/database/sqlc"

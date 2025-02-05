@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 
+	"training_toolbox/internal/database"
 	"training_toolbox/internal/parser"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -30,6 +31,7 @@ const (
 func run() error {
 	file := flag.String("file", "", "Path to a PNG file")
 	dir := flag.String("dir", "", "Path to a directory containing PNG files")
+	// db := flag.String("db", "", "Path to a sqlite database")
 	flag.Parse()
 
 	if *file == "" && *dir == "" {
@@ -78,16 +80,14 @@ func getPngPaths(root string) ([]string, error) {
 
 	total := len(paths)
 	if total == 0 {
-		return nil, fmt.Errorf("No PNG files found.")
+		return nil, fmt.Errorf("no .png files found in %s", root)
 	}
 	return paths, nil
 }
 
 type fileResult struct {
-	path     string
-	prompt   string
-	workflow string
-	err      error
+	database.FilePrompt
+	err error
 }
 
 func parseDirectoryCommand(root string) error {
@@ -97,26 +97,11 @@ func parseDirectoryCommand(root string) error {
 		return fmt.Errorf("error getting PNG paths: %w", err)
 	}
 
-	// Create (or open) the sqlite DB at the root.
 	dbPath := filepath.Join(root, "prompts.sqlite")
-	db, err := sql.Open("sqlite3", dbPath)
-	if err != nil {
-		return fmt.Errorf("failed to open sqlite db: %w", err)
-	}
-	defer db.Close()
 
-	// Create table if not exists.
-	createTable := `
-    CREATE TABLE IF NOT EXISTS prompts (
-        file_path TEXT PRIMARY KEY,
-        prompt TEXT,
-        workflow TEXT
-    );`
-	if _, err := db.Exec(createTable); err != nil {
-		return fmt.Errorf("failed to create table: %w", err)
-	}
-
-	return parseDirectory(paths, db)
+	return database.WithDB(dbPath, func(db *sql.DB) error {
+		return parseDirectory(paths, db)
+	})
 }
 
 func parseDirectory(paths []string, db *sql.DB) error {
@@ -130,7 +115,8 @@ func parseDirectory(paths []string, db *sql.DB) error {
 		defer wg.Done()
 		for path := range filesCh {
 			prompt, workflow, err := parser.ExtractFileChunks(path)
-			resultsCh <- fileResult{path, prompt, workflow, err}
+			fileprompt := database.FilePrompt{Path: path, Prompt: prompt, Workflow: workflow}
+			resultsCh <- fileResult{FilePrompt: fileprompt, err: err}
 		}
 	}
 	wg.Add(numWorkers)
@@ -155,9 +141,9 @@ func parseDirectory(paths []string, db *sql.DB) error {
 		valueArgs := make([]interface{}, 0, len(batch)*3)
 		for _, item := range batch {
 			valueStrings = append(valueStrings, "(?, ?, ?)")
-			valueArgs = append(valueArgs, item.path)
-			valueArgs = append(valueArgs, item.prompt)
-			valueArgs = append(valueArgs, item.workflow)
+			valueArgs = append(valueArgs, item.Path)
+			valueArgs = append(valueArgs, item.Prompt)
+			valueArgs = append(valueArgs, item.Workflow)
 		}
 		stmt := fmt.Sprintf("INSERT OR REPLACE INTO prompts (file_path, prompt, workflow) VALUES %s", strings.Join(valueStrings, ","))
 		_, err := db.Exec(stmt, valueArgs...)
@@ -169,7 +155,7 @@ func parseDirectory(paths []string, db *sql.DB) error {
 	for res := range resultsCh {
 		processed++
 		if res.err != nil {
-			fmt.Fprintf(os.Stderr, "\n\nerror processing %s: %v\n\n", res.path, res.err)
+			fmt.Fprintf(os.Stderr, "\n\nerror processing %s: %v\n\n", res.Path, res.err)
 		}
 
 		batch = append(batch, res)
