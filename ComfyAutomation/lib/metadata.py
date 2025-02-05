@@ -5,8 +5,6 @@ from itertools import islice
 import io
 import base64
 
-from exif import Image as exif_image
-
 def decode_image(i):
     return Image.open(io.BytesIO(base64.b64decode(i.split(",", 1)[0])))
 
