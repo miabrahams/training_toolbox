@@ -63,4 +63,17 @@ func examineDatabase(dbpath string) error {
 	})
 }
 
-func standardWF(workflow parser.Prompt)
+/*
+func standardWF(workflow parser.Prompt) {
+	type node struct {
+		ID     string `json:"id"`
+		SRName string `json:"sr_name"`
+		Role   string `json:"role"`
+	}
+	// newest
+	negative := node{"448", "PCLazyTextEncode", "Positive"}
+	positive := node{"553", "CR Prompt Text", "Negative"}
+	loras := node{"553", "CR Prompt Text", "Negative"}
+}
+
+*/

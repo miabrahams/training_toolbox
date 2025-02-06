@@ -31,7 +31,7 @@ const (
 func run() error {
 	file := flag.String("file", "", "Path to a PNG file")
 	dir := flag.String("dir", "", "Path to a directory containing PNG files")
-	// db := flag.String("db", "", "Path to a sqlite database")
+	dbpath := flag.String("db", "", "Path to a sqlite database")
 	flag.Parse()
 
 	if *file == "" && *dir == "" {
@@ -46,7 +46,7 @@ func run() error {
 	if *file != "" {
 		return parseFileCommand(*file)
 	}
-	return parseDirectoryCommand(*dir)
+	return parseDirectoryCommand(*dir, dbpath)
 }
 
 func parseFileCommand(file string) error {
@@ -90,14 +90,19 @@ type fileResult struct {
 	err error
 }
 
-func parseDirectoryCommand(root string) error {
+func parseDirectoryCommand(root string, dbpath *string) error {
 
 	paths, err := getPngPaths(root)
 	if err != nil {
 		return fmt.Errorf("error getting PNG paths: %w", err)
 	}
 
-	dbPath := filepath.Join(root, "prompts.sqlite")
+	var dbPath string
+	if dbpath == nil {
+		dbPath = filepath.Join(root, "prompts.sqlite")
+	} else {
+		dbPath = *dbpath
+	}
 
 	return database.WithDB(dbPath, func(db *sql.DB) error {
 		return parseDirectory(paths, db)
