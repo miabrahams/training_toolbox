@@ -1,5 +1,6 @@
 import re
 import json
+from typing import Any
 from PIL import Image, PngImagePlugin
 from itertools import islice
 import io
@@ -19,7 +20,7 @@ def chunks(lst, chunk_size):
 
 
 
-artist_filename_re = re.compile("^grid-[0-9]{4}-(.*)\.png")
+artist_filename_re = re.compile(r"^grid-[0-9]{4}-(.*)\.png")
 IMAGE_PROPERTIES = ['exif', 'dpi', 'srgb', 'icc_profile', 'gamma', 'interlace', 'chromaticity', 'photoshop', 'XML:com.adobe.xmp']
 
 def nai_to_webui(prompt):
@@ -50,8 +51,8 @@ def parse_software_metadata(meta_item, software):
         return {}
 
 
-PATTERN_WITH_NEGATIVE = re.compile("([\S\s]*)\nNegative prompt: ([\s\S]*)\n(Steps: [\s\S]*)")
-PATTERN_WITHOUT_NEGATIVE = re.compile("([\s\S]*)\n(Steps: [\s\S]*)")
+PATTERN_WITH_NEGATIVE = re.compile(r"([\S\s]*)\nNegative prompt: ([\s\S]*)\n(Steps: [\s\S]*)")
+PATTERN_WITHOUT_NEGATIVE = re.compile(r"([\s\S]*)\n(Steps: [\s\S]*)")
 def parse_metadata(parameters):
     try:
         # Comes as one long string
@@ -141,7 +142,7 @@ def artist_from_file(filename, method=0):
     if method == 0:
         return prompt.split("by ")[1]
     elif method == 1:
-        re.match(".*by (.*)\).*", prompt).group(1)
+        re.match(r".*by (.*)\).*", prompt).group(1)
     elif method == 2:
         return prompt.split("(by ")[1].split(":1.25")[0]
     raise Exception("Unknown method")
@@ -156,22 +157,18 @@ def artist_from_filename(filename):
     else:
         return None
 
-# Progressively parse comfyui files
-
-def comfy_metadata(filename: str) -> tuple[dict[str, str], dict[str, str]]:
-    data = raw_image_info(filename)
-    prompt = json.loads(data['prompt'])
-    workflow = json.loads(data['workflow'])
+# parse comfyui files
+def comfy_metadata(image_info: dict) -> tuple[dict[str, Any], dict[str, Any]]:
+    prompt = json.loads(image_info['prompt'])
+    workflow = json.loads(image_info['workflow'])
     return prompt, workflow
 
-def comfy_prompt(filename: str) -> dict[str, str]:
-    return comfy_metadata(filename)[0]
+def read_comfy_metadata(filename: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    image_info = raw_image_info(filename)
+    return comfy_metadata(image_info)
 
-def comfy_nodes(filename: str) -> dict[str, str]:
-    return {id: value for (id, value) in comfy_prompt(filename).items()}
-
-def comfy_unique_node_types(filename: str) -> dict[str, str]:
-    node_types = [value['class_type'] for (_, value) in comfy_prompt(filename).items()]
+def comfy_unique_node_types(filename: str) -> list[str]:
+    node_types = [value['class_type'] for (_, value) in read_comfy_metadata(filename)[0].items()]
     return sorted(set(node_types))
 
 
