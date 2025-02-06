@@ -158,8 +158,14 @@ def artist_from_filename(filename):
 
 # Progressively parse comfyui files
 
+def comfy_metadata(filename: str) -> tuple[dict[str, str], dict[str, str]]:
+    data = raw_image_info(filename)
+    prompt = json.loads(data['prompt'])
+    workflow = json.loads(data['workflow'])
+    return prompt, workflow
+
 def comfy_prompt(filename: str) -> dict[str, str]:
-    return json.loads(raw_image_info(filename)['prompt'])
+    return comfy_metadata(filename)[0]
 
 def comfy_nodes(filename: str) -> dict[str, str]:
     return {id: value for (id, value) in comfy_prompt(filename).items()}
