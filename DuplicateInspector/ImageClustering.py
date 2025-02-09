@@ -2,21 +2,15 @@
 # Useful to categorize artists and their effects on image generation.
 import os
 from PIL import Image
-from lib.metadata import parse_metadata
 import pickle
 from tqdm import tqdm
 
 # SVD method
-import scipy.io as sio
-import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 
 
 # scikit-learn faces demo
-import logging
-from numpy.random import RandomState
-from sklearn.datasets import fetch_olivetti_faces
 from sklearn import cluster, decomposition, metrics
 
 
@@ -99,7 +93,7 @@ img_centered = img_centered - img_centered.mean(axis=1).reshape(n_samples, -1)
 n_row, n_col = 5, 3
 n_components = n_row * n_col
 image_size = new_size[1], new_size[0]
-def plot_gallery(title, images, n_col=n_col, n_row=n_row, cmap=plt.cm.gray):
+def plot_gallery(title, images, n_col=n_col, n_row=n_row, cmap=plt.colormaps['gray']):
     fig, axs = plt.subplots(
         nrows=n_row,
         ncols=n_col,
