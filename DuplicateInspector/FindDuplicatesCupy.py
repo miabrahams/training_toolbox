@@ -8,8 +8,6 @@ from send2trash import send2trash
 import argparse
 import cupy as cp
 
-# Great! Suppose I hadn't sent you a starter script. What approach would you take to find duplicates in an image dataset? I'm a little shocked at the poor performance of this method.
-
 def find_duplicates(source_dir, target_dir, threshold=0.1, keep_largest=None, remove_duplicates=False):
     source_files = [f for f in Path(source_dir).glob('**/*') if f.is_file() and f.suffix in ['.jpg', '.png']]
     target_files = [f for f in Path(target_dir).glob('**/*') if f.is_file() and f.suffix in ['.jpg', '.png']]
@@ -18,7 +16,7 @@ def find_duplicates(source_dir, target_dir, threshold=0.1, keep_largest=None, re
 
     for target_file in tqdm(target_files):
         try:
-            target_img = skimage.io.imread(target_file, as_gray=1)
+            target_img = skimage.io.imread(target_file, as_gray=True)
             target_img = cp.asarray(skimage.transform.resize(target_img, (256, 256), anti_aliasing=True))
         except Exception as e:
             print(f"Could not read target image file {target_file}")
@@ -27,7 +25,7 @@ def find_duplicates(source_dir, target_dir, threshold=0.1, keep_largest=None, re
 
         for source_file in source_files:
             try:
-                source_img = skimage.io.imread(source_file, as_gray=1)
+                source_img = skimage.io.imread(source_file, as_gray=True)
                 source_img = cp.asarray(skimage.transform.resize(source_img, (256, 256), anti_aliasing=True))
             except Exception as e:
                 print(f"Could not read source image file {source_file}")
@@ -48,7 +46,8 @@ def find_duplicates(source_dir, target_dir, threshold=0.1, keep_largest=None, re
                         send2trash(str(target_file))
                     break
             except ValueError as e:
-                pass  # Image dimensions mismatch
+                print(f"Could not compare images {target_file} and {source_file}: {e}")
+                pass
 
     return duplicates
 

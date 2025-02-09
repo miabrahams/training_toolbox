@@ -54,28 +54,30 @@ def parse_software_metadata(meta_item, software):
 PATTERN_WITH_NEGATIVE = re.compile(r"([\S\s]*)\nNegative prompt: ([\s\S]*)\n(Steps: [\s\S]*)")
 PATTERN_WITHOUT_NEGATIVE = re.compile(r"([\s\S]*)\n(Steps: [\s\S]*)")
 def parse_metadata(parameters):
-    try:
-        # Comes as one long string
-        if parameters.find("Negative prompt:") > -1:
-            match = PATTERN_WITH_NEGATIVE.fullmatch(parameters)
-            [positive, negative, gen_params] = match.groups()
-        else:
-            negative = ""
-            match = PATTERN_WITHOUT_NEGATIVE.fullmatch(parameters)
-            [positive, gen_params] = match.groups()
-        # Convert generation params into dictionary
-        # Get rid of prompt templates
-        if gen_params.find("Template:") > -1:
-            gen_params = gen_params[:gen_params.find("Template:")]
-        gen_params = gen_params.split(", ")
-        gen_params = [param.split(": ") for param in gen_params]
-        gen_params = {param[0]: param[1] for param in gen_params}
-        return {'positive': positive,
-                'negative': negative,
-                'gen_params': gen_params}
-    except Exception as e:
-        print("Error parsing metadata.")
-        raise Exception(parameters)
+    # Comes as one long string
+    if parameters.find("Negative prompt:") > -1:
+        match = PATTERN_WITH_NEGATIVE.fullmatch(parameters)
+        if match is None:
+            print("Error parsing metadata.")
+            raise Exception(parameters)
+        [positive, negative, gen_params] = match.groups()
+    else:
+        negative = ""
+        match = PATTERN_WITHOUT_NEGATIVE.fullmatch(parameters)
+        if match is None:
+            print("Error parsing metadata.")
+            raise Exception(parameters)
+        [positive, gen_params] = match.groups()
+    # Convert generation params into dictionary
+    # Get rid of prompt templates
+    if gen_params.find("Template:") > -1:
+        gen_params = gen_params[:gen_params.find("Template:")]
+    gen_params = gen_params.split(", ")
+    gen_params = [param.split(": ") for param in gen_params]
+    gen_params = {param[0]: param[1] for param in gen_params}
+    return {'positive': positive,
+            'negative': negative,
+            'gen_params': gen_params}
 
 def tags_from_metadata(metadata):
     tags = []
@@ -104,7 +106,14 @@ def tags_from_metadata(metadata):
         tags.append(tags_item)
     return tags
 
-def raw_image_info(filename: str) -> dict[str, str]:
+def raw_image_info(filename: str) -> dict[str | tuple[int, int], Any]:
+    img = Image.open(filename)
+    _ = img.load() # TODO what is the return value?
+    return img.info
+
+
+"""
+def raw_image_info_orig(filename: str) -> dict[str, str]:
     img = Image.open(filename)
     if filename[-4:] == ".png":
         info = img.load()
@@ -113,10 +122,14 @@ def raw_image_info(filename: str) -> dict[str, str]:
     elif filename[-4:] == ".jpg":
         exif_data = img._getexif()
         return exif_data[37510].decode('utf-8').replace('\x00', '').replace('UNICODE', '')
+ """
+
 
 # Read PIL image metadata
 def info_from_file(filename: str) -> dict:
-    info = raw_image_info(filename);
+    info = raw_image_info(filename)
+    if info is None:
+        raise Exception("No metadata found in file " + filename)
     return info['parameters']
 
 def metadata_from_file(filename: str) -> dict:
@@ -130,6 +143,8 @@ def hash_from_metadata(metadata: dict) -> str:
 # Extract the model hash from filename
 def hash_from_file(filename):
     metadata = info_from_file(filename)
+    if metadata is None:
+        return None
     return hash_from_metadata(metadata)
 
 # Extract the artist name from prompt
@@ -142,7 +157,10 @@ def artist_from_file(filename, method=0):
     if method == 0:
         return prompt.split("by ")[1]
     elif method == 1:
-        re.match(r".*by (.*)\).*", prompt).group(1)
+        matches = re.match(r".*by (.*)\).*", prompt)
+        if matches is None:
+            raise Exception("could not find artist in prompt " + prompt)
+        return matches.group(1)
     elif method == 2:
         return prompt.split("(by ")[1].split(":1.25")[0]
     raise Exception("Unknown method")
@@ -167,8 +185,14 @@ def read_comfy_metadata(filename: str) -> tuple[dict[str, Any], dict[str, Any]]:
     image_info = raw_image_info(filename)
     return comfy_metadata(image_info)
 
+def comfy_prompt(filename: str) -> dict[str, dict[str, Any]]:
+    return json.loads(raw_image_info(filename)['prompt'])
+
+def comfy_nodes(filename: str) -> dict[str, dict[str, Any]]:
+    return {id: value for (id, value) in comfy_prompt(filename).items()}
+
 def comfy_unique_node_types(filename: str) -> list[str]:
-    node_types = [value['class_type'] for (_, value) in read_comfy_metadata(filename)[0].items()]
+    node_types = [value['class_type'] for value in comfy_prompt(filename).values()]
     return sorted(set(node_types))
 
 

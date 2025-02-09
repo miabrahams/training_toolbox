@@ -1,5 +1,6 @@
 
 import requests
+from typing import List
 
 API = 'http://127.0.0.1:7860/sdapi/v1'
 
@@ -15,7 +16,7 @@ def get_model_names():
     return [m['model_name'] for m in models]
 
 
-def find_model(name: str, model_names) -> int:
+def find_model(name: str, model_names: List[str]) -> str:
     if name in model_names:
         found_model = name
     else:
@@ -33,5 +34,5 @@ def find_model(name: str, model_names) -> int:
     return found_model
 
 
-extra_networks = requests.get(url=f'{API}/extra-networks').json()
-extra_networks
+def get_extra_networks():
+    return requests.get(url=f'{API}/extra-networks').json()
