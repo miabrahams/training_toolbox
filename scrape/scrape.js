@@ -1,11 +1,9 @@
 
 
 import {promises as fsPromises} from 'fs';
-import { exit } from 'process';
-import puppeteer from 'puppeteer';
 
-
-
+// TODO: WIP code. Not sure what I used this for tbh.
+/*
 // FA
 const fa_options = {
     cookies_file: "www.furaffinity.net.cookies.json",
@@ -17,7 +15,7 @@ const fa_selectorFn = links => links.map(a => [a.href, a.innerText]);
 const fa_nextLinkSelector = null;
 
 
-// TODO: Grab titles as well as links!!
+// Grab titles as well as links!!
 // Also: make visiting the links separate from finding them
 async function fa_visitor(page, link, output, currentUrl = null) {
     try {
@@ -63,94 +61,121 @@ async function ar_pageVisitor(page, url) {
 
 const ar_nextLinkSelector = 'div.pagination > span > strong + .page-sep + a';
 
+*/
+
+
+/* Config */
+import { promises as fsPromises } from 'fs';
+import { chromium } from 'playwright';
+
+// Configuration object
 const config = {
-  cookiesFile: null,
-  targetUrl: "https://aryion.com/forum/viewtopic.php?f=18&t=457",
-  outputName: "aryion2.json",
-  maxPages: 570,
-  pageVisitor: ar_pageVisitor,
-  nextLinkSelector: ar_nextLinkSelector,
-  itemVisitor: null,
-  append: false
+    cookiesFile: null,  // Path to cookies file (optional)
+    targetUrl: "https://aryion.com/forum/viewtopic.php?f=18&t=457",
+    outputName: "aryion2.json",
+    maxPages: 570,
+    append: false,
+    pageVisitor: async (page, url) => { // Refactor pageVisitor to be inside config
+        const data = await page.$$eval('div.post', (posts) =>
+            posts.map((post) => {
+                return {
+                    author: post.querySelector('.author strong').innerText,
+                    id: post.id,
+                    content: post.querySelector('.content').innerText,
+                };
+            })
+        );
+
+        const pageNumber = await page.$eval('.pagination strong', a => a.innerText);
+        return { pageNumber, url, data };
+    },
+    nextLinkSelector: 'div.pagination > span > strong + .page-sep + a',
+    itemVisitor: null, // Optional: Function to process each item
 };
 
+async function main() {
+    const { targetUrl, maxPages, pageVisitor, nextLinkSelector, cookiesFile, outputName, append } = config;
 
-// pageVisitor: Given current page, return a data object to store in output array. Could also store page URL, etc if need be.
-// itemVisitor: do something on each data item. Not necessary for eg forum threads.
+    let cookies = null;
+    if (cookiesFile) {
+        try {
+            cookies = JSON.parse(await fsPromises.readFile(`data/cookies/${cookiesFile}`, 'utf8'));
+        } catch (err) {
+            console.warn(`Could not read cookies file: ${cookiesFile}.  Continuing without cookies.`, err);
+            cookies = null;
+        }
+    }
 
+    console.log("Starting...");
 
+    const browser = await chromium.launch();  // Launch Playwright Chromium
+    const context = await browser.newContext(); // Create context, allows setting cookies
+    const page = await context.newPage();        // Create a new page
 
-(async () => {
-  const {targetUrl, maxPages, pageVisitor, nextLinkSelector, itemVisitor, cookiesFile, outputName, append} = config;
+    if (cookies) {
+        await context.addCookies(cookies); // Playwright way of setting cookies
+    }
 
-  let cookies = null;
-  if (cookiesFile) {
-    cookies = await fsPromises.readFile(`data/cookies/${config.cookiesFile}`).then(JSON.parse);
-  }
+    const outFile = `data/scrape/${outputName}`;
+    let data = [];
 
+    if (append) {
+        console.log("Looking for existing data...");
+        try {
+            const fileContent = await fsPromises.readFile(outFile, 'utf8');
+            data = JSON.parse(fileContent);
+            console.log(`Loaded ${data.length} existing entries.`);
+        } catch (err) {
+            console.log('No existing data found. Creating new file.');
+        }
+    }
 
-  console.log("Starting")
-  const browser = await puppeteer.launch();
-  const page = await browser.newPage();
-  if (cookies) { await page.setCookie(...cookies); }
+    // Disable image loading - Playwright method
+    await page.route('**/*', route => {
+        if (route.request().resourceType() === 'image')
+            route.abort();
+        else
+            route.continue();
+    });
 
+    let currentUrl = targetUrl;
 
+    for (let pageCount = 0; pageCount < maxPages; pageCount++) {
+        if (!currentUrl) {
+            console.log("Reached the end of the links.  Finishing.");
+            break;
+        }
 
-  // Use existing file
-  const outFile = `data/scrape/${outputName}`;
-  let data = [];
+        try {
+            console.log(`Navigating to ${currentUrl}`);
+            await page.goto(currentUrl);
+            console.log(`Loaded page ${pageCount + 1}/${maxPages} - ${currentUrl}`);
 
-  if (append) {
-    console.log("Looking for existing data.");
+            const pageData = await pageVisitor(page, currentUrl);
+            data.push(pageData);
+
+            try {
+                currentUrl = await page.$eval(nextLinkSelector, el => el.href);
+            } catch (err) {
+                console.warn("Could not find next link.  Assuming end of sequence.", err);
+                currentUrl = null;
+            }
+
+        } catch (err) {
+            console.error(`Error processing ${currentUrl}: `, err);
+            currentUrl = null;  // Stop if there's an error
+        }
+    }
+
+    await browser.close();
+
     try {
-      data = await fs.promises.readFile(outfile, 'utf8').then(JSON.parse);
+        await fsPromises.writeFile(outFile, JSON.stringify(data, null, '  '));
+        console.log(`Successfully wrote data to ${outFile}`);
+    } catch (err) {
+        console.error('The file could not be written.', err);
+        console.error(JSON.stringify(data));  // Output data to console as fallback
     }
-    catch (err) {
-      console.log('No existing data found. Creating new file.');
-    }
-  }
+}
 
-
-  // Disable image loading
-  await page.setViewport({ width: 1920, height: 1080 });
-  await page.setRequestInterception(true);
-  page.on('request', (req) => { if (req.resourceType() === 'image') req.abort(); else req.continue(); });
-
-
-  // Start here
-  let currentUrl = targetUrl;
-
-
-  for (let pageCount = 0; pageCount < maxPages; pageCount++) {
-    if (currentUrl === null) {
-      console.log("Done.");
-      break;
-    }
-
-    try {
-      await page.goto(currentUrl);
-      console.log(`Loaded page ${pageCount}/${maxPages} - ${currentUrl}`);
-      const pageData = await pageVisitor(page, currentUrl);
-      data.push(pageData);
-      currentUrl = await page.$eval(nextLinkSelector, el => el.href);
-    }
-    catch (err) {
-      console.error("Error: ", err);
-      currentUrl = null;
-    }
-  }
-
-
-  await browser.close();
-
-  try {
-    await fsPromises.writeFile(
-      outFile,
-      JSON.stringify(data, null, '  ')
-    );
-    console.log("Done.")
-  } catch (err) {
-    console.error('The file could not be written.', err);
-    print(JSON.stringify(data));
-  }
-})();
+main().catch(console.error);
