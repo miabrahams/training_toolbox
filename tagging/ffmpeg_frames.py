@@ -1,15 +1,12 @@
 import subprocess
 import argparse
 from pathlib import Path
-import gradio as gr
-import os
-from pathlib import Path
 
 
-def extract_frames(video_path, output_dir, max_frames=30):
+def extract_frames(video_path: Path, output_dir, max_frames=30):
     """Extract frames from a video using ffmpeg."""
     # Create output directory for this video
-    video_name = Path(video_path).stem
+    video_name = video_path.stem
     video_output_dir = Path(output_dir) / video_name
     video_output_dir.mkdir(parents=True, exist_ok=True)
 
