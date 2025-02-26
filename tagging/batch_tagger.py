@@ -30,14 +30,13 @@ def walk(folder: Path):
 
 
 def transform(image: Image.Image, device, thin: bool = False):
-    model = torch.load('model.pth').to("cuda")
-    model.eval()
-    transform = transforms.Compose([
+    """Transform an image to a tensor for model input."""
+    normal_transform = transforms.Compose([
         transforms.Resize((448, 448)),
         transforms.ToTensor(),
         transforms.Normalize(
-            mean=[ 0.48145466, 0.4578275, 0.40821073 ],
-            std=[ 0.26862954, 0.26130258, 0.27577711 ]
+            mean=[0.48145466, 0.4578275, 0.40821073],
+            std=[0.26862954, 0.26130258, 0.27577711]
         ),
     ])
 
@@ -46,22 +45,28 @@ def transform(image: Image.Image, device, thin: bool = False):
         transforms.CenterCrop(448),
         transforms.ToTensor(),
         transforms.Normalize(
-            mean=[ 0.48145466, 0.4578275, 0.40821073 ],
-            std=[ 0.26862954, 0.26130258, 0.27577711 ]
+            mean=[0.48145466, 0.4578275, 0.40821073],
+            std=[0.26862954, 0.26130258, 0.27577711]
         ),
     ])
+
     if thin:
-        return thin_transform(image).unsqueeze(0).to(device)
+        tensor = thin_transform(image)
     else:
-        return transform(image).unsqueeze(0).to(device)
+        tensor = normal_transform(image)
+
+    if not isinstance(tensor, torch.Tensor):
+        raise TypeError("Transform did not return a torch.Tensor")
+
+    # Add batch dimension and move to device
+    return tensor.unsqueeze(0).to(device)
 
 
 def load_image(image_path: Path, device):
     image = Image.open(image_path).convert("RGB")
     ratio = image.height / image.width
-    if ratio > 2.0 or ratio < 0.5:
-        return transform(image, device, True)
-    return transform(image, device, False)
+    # Call transform with the appropriate parameters
+    return transform(image, device, thin=(ratio > 2.0 or ratio < 0.5))
 
 def load_model(device):
     model = torch.load(MODEL_PATH, map_location=device)
