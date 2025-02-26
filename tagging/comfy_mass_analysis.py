@@ -308,74 +308,131 @@ def visualize_clusters_with_diffs(reduced_embeddings: np.ndarray, clusters: np.n
         # Run common diff analysis on these sample prompts
         analyze_cluster_diffs(sample_prompts[:5])  # analyze first 5 prompts in the cluster
 
-def main():
-    # Parse command-line arguments
-    parser = argparse.ArgumentParser(description='Analyze and cluster AI image prompts')
-    parser.add_argument('--graph', action='store_true', help='Display clustering graphs')
-    parser.add_argument('--db', default='data/prompts.sqlite', help='Path to SQLite database')
-    parser.add_argument('--min-cluster-size', type=int, default=5, help='Minimum cluster size')
-    parser.add_argument('--sample-size', type=int, default=5, help='Sample size for cluster analysis')
-    parser.add_argument('--data-dir', default='data', help='Directory to save/load analysis data')
-    parser.add_argument('--force-recompute', action='store_true',
-                        help='Force recomputation of embeddings and clusters')
-    parser.add_argument('--screen-dir', action='append', default=[],
-                        help='Directory paths to screen against (can be specified multiple times)')
-    parser.add_argument('--show-paths', action='store_true',
-                        help='Show image file paths in cluster summary')
-    args = parser.parse_args()
+def analyze_directory_clusters(
+    directory_path: str,
+    clusters: np.ndarray,
+    prompt_texts: List[str],
+    image_paths: Dict[str, str]
+) -> Dict[int, List[str]]:
+    """
+    Analyze how a specific directory contributes to clusters.
 
-    # Connect to DB for image paths regardless
-    sqlite_db = args.db
-    conn = sqlite3.connect(sqlite_db)
+    Args:
+        directory_path: Path to the directory to analyze
+        clusters: Cluster assignments for each prompt
+        prompt_texts: List of prompt texts
+        image_paths: Mapping from prompt to image path
 
-    # Get image paths for screening
-    image_paths = get_image_paths_from_db(conn)
+    Returns:
+        Dictionary mapping cluster IDs to lists of prompts in the specified directory
+    """
+    directory_path = os.path.normpath(directory_path)
+    directory_clusters = {}
 
+    for idx, prompt in enumerate(prompt_texts):
+        cluster_id = clusters[idx]
+        image_path = image_paths.get(prompt)
+
+        if image_path and os.path.normpath(image_path).startswith(directory_path):
+            if cluster_id not in directory_clusters:
+                directory_clusters[cluster_id] = []
+            directory_clusters[cluster_id].append(prompt)
+
+    return directory_clusters
+
+def print_noise_cluster_prompts(clusters: np.ndarray, prompt_texts: List[str]):
+    """Print the prompts that are in the noise cluster."""
+    noise_indices = np.where(clusters == -1)[0]
+    noise_prompts = [prompt_texts[i] for i in noise_indices]
+
+    print("\n=== NOISE CLUSTER PROMPTS ===")
+    for prompt in noise_prompts:
+        print(prompt)
+
+def print_directory_noise_cluster(
+    directory_path: str,
+    clusters: np.ndarray,
+    prompt_texts: List[str],
+    image_paths: Dict[str, str],
+    max_samples: int = 10
+):
+    """
+    Print a sample of prompts from the noise cluster that are in the specified directory.
+
+    Args:
+        directory_path: Path to the directory to analyze
+        clusters: Cluster assignments for each prompt
+        prompt_texts: List of prompt texts
+        image_paths: Mapping from prompt to image path
+        max_samples: Maximum number of noise samples to display
+    """
+    directory_path = os.path.normpath(directory_path)
+    noise_prompts = []
+
+    # Find all noise cluster prompts from the specified directory
+    for idx, prompt in enumerate(prompt_texts):
+        if clusters[idx] == -1:  # Noise cluster
+            image_path = image_paths.get(prompt)
+            if image_path and os.path.normpath(image_path).startswith(directory_path):
+                noise_prompts.append(prompt)
+
+    # Sample and print
+    print(f"\n=== NOISE CLUSTER PROMPTS FROM {directory_path} ===")
+    print(f"Found {len(noise_prompts)} prompts in the noise cluster from this directory")
+
+    if noise_prompts:
+        samples = random.sample(noise_prompts, min(max_samples, len(noise_prompts)))
+        for i, prompt in enumerate(samples):
+            print(f"\n{i+1}. {prompt}")
+    else:
+        print("No noise cluster prompts found in this directory.")
+
+# Refactored main() into smaller functions
+def load_or_compute_analysis_data(args, conn):
+    """Load existing analysis data or compute new data if needed."""
     # Try to load existing analysis data first if not forcing recomputation
-    embeddings = None
-    reduced_embeddings = None
-    clusters = None
-    prompt_texts = None
-
     if not args.force_recompute:
         analysis_data = load_analysis_data(args.data_dir)
         if analysis_data is not None:
             embeddings, reduced_embeddings, clusters, prompt_texts = analysis_data
+            # Create prompts Counter from loaded prompt_texts
+            prompts = Counter(prompt_texts)
+            print(f"Loaded existing analysis data with {len(prompt_texts)} prompts")
+            return embeddings, reduced_embeddings, clusters, prompt_texts, prompts
 
     # If no existing data or force recompute, process from scratch
-    if embeddings is None:
-        BadImages: List[ComfyImage] = []
-        positives: List[str] = []
+    BadImages: List[ComfyImage] = []
+    positives: List[str] = []
 
-        print(f"Loading prompts from database: {sqlite_db}")
-        for row in conn.execute('SELECT file_path, prompt FROM prompts'):
-            try:
-                prompt = json.loads(row[1])
-                filename = row[0]
-                img = ComfyImage(filename, prompt, {})
-                positive = extract_positive_prompt(prompt)
-                positives.append(positive)
-            except Exception:
-                BadImages.append(img)
-                pass
+    print(f"Loading prompts from database: {args.db}")
+    for row in conn.execute('SELECT file_path, prompt FROM prompts'):
+        try:
+            prompt = json.loads(row[1])
+            filename = row[0]
+            img = ComfyImage(filename, prompt, {})
+            positive = extract_positive_prompt(prompt)
+            positives.append(positive)
+        except Exception:
+            BadImages.append(img)
+            pass
 
-        print(f"{len(positives)} / {len(positives)+len(BadImages)}")
-        if BadImages:
-            print(f"Bad images: {[b.filename for b in BadImages]}")
+    print(f"{len(positives)} / {len(positives)+len(BadImages)}")
+    if BadImages:
+        print(f"Bad images: {[b.filename for b in BadImages]}")
 
-        prompts = Counter([clean_prompt(p) for p in positives])
+    prompts = Counter([clean_prompt(p) for p in positives])
 
-        # Run the analysis
-        prompt_texts = list(prompts.keys())
-        embeddings, reduced_embeddings, clusters = analyze_prompts(prompt_texts)
+    # Run the analysis
+    prompt_texts = list(prompts.keys())
+    embeddings, reduced_embeddings, clusters = analyze_prompts(prompt_texts)
 
-        # Save the analysis data for future use
-        save_analysis_data(embeddings, reduced_embeddings, clusters, prompt_texts, args.data_dir)
-    else:
-        # Create prompts Counter from loaded prompt_texts for compatibility with existing code
-        prompts = Counter(prompt_texts)
-        print(f"Loaded existing analysis data with {len(prompt_texts)} prompts")
+    # Save the analysis data for future use
+    save_analysis_data(embeddings, reduced_embeddings, clusters, prompt_texts, args.data_dir)
 
+    return embeddings, reduced_embeddings, clusters, prompt_texts, prompts
+
+def run_cluster_analysis(args, clusters, prompts, prompt_texts, reduced_embeddings, image_paths):
+    """Run cluster analysis and visualization based on command-line args."""
     # Print cluster summary with representative prompts
     # Pass screen directories if specified
     screen_dirs = args.screen_dir if args.screen_dir else None
@@ -405,6 +462,83 @@ def main():
         print(f"Screened directories: {screen_dirs}")
     print(f"Noise points: {noise_points}")
     print(f"Total prompts: {len(prompt_texts)}")
+
+def analyze_specific_directory(args, clusters, prompt_texts, image_paths):
+    """If specified, analyze how a specific directory contributes to clusters."""
+    if not args.analyze_dir:
+        return
+
+    directory_clusters = analyze_directory_clusters(
+        args.analyze_dir, clusters, prompt_texts, image_paths
+    )
+
+    print(f"\n=== CLUSTER CONTRIBUTIONS FOR DIRECTORY: {args.analyze_dir} ===")
+
+    # Get counts by cluster
+    cluster_counts = {cluster_id: len(prompts) for cluster_id, prompts in directory_clusters.items()}
+    total_images = sum(cluster_counts.values())
+
+    # Print summary statistics
+    print(f"Total images in directory: {total_images}")
+    print(f"Images assigned to clusters: {total_images - cluster_counts.get(-1, 0)}")
+    print(f"Images in noise cluster: {cluster_counts.get(-1, 0)}")
+    print(f"Directory contributes to {len(cluster_counts) - (1 if -1 in cluster_counts else 0)} clusters")
+
+    # Print clusters (excluding noise cluster) with descending count order
+    print("\nCluster distribution:")
+    for cluster_id, count in sorted(
+        [(k, v) for k, v in cluster_counts.items() if k != -1],
+        key=lambda x: x[1],
+        reverse=True
+    ):
+        print(f"Cluster {cluster_id}: {count} images")
+
+    # Print sample prompts for each cluster
+    max_sample = args.sample_size
+    for cluster_id, prompts in sorted(directory_clusters.items()):
+        if cluster_id == -1:  # Skip noise cluster, handle it separately
+            continue
+        print(f"\nCluster {cluster_id} ({len(prompts)} prompts):")
+        for prompt in prompts[:max_sample]:
+            print(f"  {prompt}")
+
+    # Print sample of noise cluster prompts
+    if args.noise_sample > 0:
+        print_directory_noise_cluster(
+            args.analyze_dir, clusters, prompt_texts, image_paths, args.noise_sample
+        )
+
+def main():
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(description='Analyze and cluster AI image prompts')
+    parser.add_argument('--graph', action='store_true', help='Display clustering graphs')
+    parser.add_argument('--db', default='data/prompts.sqlite', help='Path to SQLite database')
+    parser.add_argument('--min-cluster-size', type=int, default=5, help='Minimum cluster size')
+    parser.add_argument('--sample-size', type=int, default=5, help='Sample size for cluster analysis')
+    parser.add_argument('--noise-sample', type=int, default=10,
+                       help='Number of noise cluster samples to display for directory analysis')
+    parser.add_argument('--data-dir', default='data', help='Directory to save/load analysis data')
+    parser.add_argument('--force-recompute', action='store_true',
+                        help='Force recomputation of embeddings and clusters')
+    parser.add_argument('--screen-dir', action='append', default=[],
+                        help='Directory paths to screen against (can be specified multiple times)')
+    parser.add_argument('--show-paths', action='store_true',
+                        help='Show image file paths in cluster summary')
+    parser.add_argument('--analyze-dir', help='Directory to analyze for cluster contributions')
+    args = parser.parse_args()
+
+    # Connect to DB for image paths
+    conn = sqlite3.connect(args.db)
+    image_paths = get_image_paths_from_db(conn)
+
+    # Load or compute the analysis data
+    embeddings, reduced_embeddings, clusters, prompt_texts, prompts = load_or_compute_analysis_data(args, conn)
+
+    # Run cluster analysis and visualization
+    run_cluster_analysis(args, clusters, prompts, prompt_texts, reduced_embeddings, image_paths)
+
+    # If requested, analyze a specific directory's contributions
+    analyze_specific_directory(args, clusters, prompt_texts, image_paths)
 
 if __name__ == "__main__":
     main()
