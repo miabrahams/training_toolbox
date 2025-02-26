@@ -1,1 +1,10 @@
 exifread
+sentence_transformers
+sklearn.preprocessing
+umap
+hdbscan
+sentence-transformers
+numpy
+scikit-learn
+umap-learn
+matplotlib

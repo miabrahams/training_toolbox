@@ -109,3 +109,65 @@ def parse_prompt_attention(text):
             i += 1
 
     return res
+
+
+def strip_prompt_markup(prompt: str) -> str:
+    """
+    Remove LoRA markup and token weight syntax from a prompt.
+
+    For example:
+      "<lora:styles/smooth anime 2 style:0.7>" is removed.
+      "(masterpiece, best quality:1.1)" becomes "masterpiece, best quality"
+    """
+    # Remove LoRA markup (e.g., <lora:...>)
+    prompt = re.sub(r'<lora:[^>]+>', '', prompt)
+    # Remove weight values inside parentheses: remove colon and weights
+    prompt = re.sub(r':\s*[0-9.]+', '', prompt)
+    # Optionally remove the remaining parentheses
+    prompt = prompt.replace('(', '').replace(')', '')
+    return prompt.strip()
+
+special_tags =  ['source_furry', 'source_anime', 'source_cartoon']
+special_tags += ['score_9', 'score_8_up', 'score_7_up', 'score_6_up', 'score_5_up', 'score_4_up']
+special_tags += ['rating_explicit', 'rating_questionable', 'rating_safe']
+special_tags += ['explicit', 'questionable', 'safe']
+special_tags += ['illustration', 'digital illustration art', 'official art', 'edit']
+special_tags += ['masterpiece', 'best quality', 'absurdres', 'hires', 'hi res', 'very awa', 'very aesthetic', '()',]
+special_tags += ['newest', 'year 2022', 'year 2023', 'year 2024', '2022', '2023', '2024']
+
+ignore_tags += ['trmk2', 'csr style', ]
+
+def remove_extra_commas(prompt: str) -> str:
+    """
+    Removes residual punctuation such as ',,,' and extra spaces.
+    """
+    # Replace multiple commas with a single comma
+    prompt = re.sub(r',\s*,+', ',', prompt)
+    # Standardize spaces around commas
+    prompt = re.sub(r'\s*,\s*', ', ', prompt)
+    # Remove any trailing commas
+    prompt = re.sub(r'(,\s*)+$', '', prompt)
+    return prompt.strip()
+
+def sort_prompt_tokens(prompt: str) -> str:
+    """
+    Split the prompt by comma, remove empty tokens, sort them lexicographically,
+    and join them back together.
+    """
+    tokens = [token.strip() for token in prompt.split(',')]
+    tokens = [token for token in tokens if token]
+    tokens.sort()
+    return ', '.join(tokens)
+
+def clean_prompt(prompt: str) -> str:
+    # First, strip out markup
+    prompt = strip_prompt_markup(prompt)
+    prompt = prompt.lower()
+    for tag in special_tags:
+        prompt = prompt.replace(tag + ', ', '').replace(tag, '')
+    prompt = prompt.strip().replace('\n', ' ').replace('\r', ' ')
+    # Remove redundant commas/punctuation
+    prompt = remove_extra_commas(prompt)
+    # Split by commas, sort the tokens, then recombine into a uniform string.
+    prompt = sort_prompt_tokens(prompt)
+    return prompt
