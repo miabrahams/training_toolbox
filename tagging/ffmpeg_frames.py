@@ -1,24 +1,20 @@
-import subprocess
 import argparse
 from pathlib import Path
+import ffmpeg
 
 
 def extract_frames(video_path: Path, output_dir, max_frames=30):
-    """Extract frames from a video using ffmpeg."""
+    """Extract frames from a video using ffmpeg-python."""
     # Create output directory for this video
     video_name = video_path.stem
     video_output_dir = Path(output_dir) / video_name
     video_output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Get video duration
-    result = subprocess.run(
-        ['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
-         '-of', 'default=noprint_wrappers=1:nokey=1', video_path],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True
-    )
-    duration = float(result.stdout.strip())
+    # Get video information
+    probe = ffmpeg.probe(str(video_path))
+    # video_info = next(s for s in probe['streams'] if s['codec_type'] == 'video')
+    # print("video info: ", video_info)
+    duration = float(probe['format']['duration'])
 
     # Calculate frame intervals
     num_frames = min(max_frames, int(duration))
@@ -29,14 +25,16 @@ def extract_frames(video_path: Path, output_dir, max_frames=30):
         time_pos = interval * i
         output_file = video_output_dir / f"frame_{i:03d}.jpg"
 
-        subprocess.run([
-            'ffmpeg', '-y', '-ss', str(time_pos),
-            '-i', video_path, '-vframes', '1',
-            '-q:v', '2', str(output_file)
-        ])
+        # Use ffmpeg-python's fluent interface
+        (
+            ffmpeg
+            .input(str(video_path), ss=time_pos)
+            .output(str(output_file), vframes=1, q=2, update=True)
+            .overwrite_output()
+            .run(quiet=True)
+        )
 
     return video_output_dir
-
 
 
 def main():
