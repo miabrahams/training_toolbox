@@ -134,8 +134,7 @@ special_tags += ['explicit', 'questionable', 'safe']
 special_tags += ['illustration', 'digital illustration art', 'official art', 'edit']
 special_tags += ['masterpiece', 'best quality', 'absurdres', 'hires', 'hi res', 'very awa', 'very aesthetic', '()',]
 special_tags += ['newest', 'year 2022', 'year 2023', 'year 2024', '2022', '2023', '2024']
-
-ignore_tags += ['trmk2', 'csr style', ]
+ignore_tags = ['trmk2', 'csr style', ]
 
 def remove_extra_commas(prompt: str) -> str:
     """

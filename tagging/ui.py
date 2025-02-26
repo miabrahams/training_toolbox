@@ -1,25 +1,8 @@
 import gradio as gr
 import os
-import subprocess
 from pathlib import Path
 from ffmpeg_frames import extract_frames
-
-def wsl_path_to_windows(path):
-    """Convert a WSL path to Windows path"""
-    if path.startswith('/mnt/'):
-        # drive = path[5:6].upper()
-        return subprocess.check_output(['wslpath', '-w', path]).decode().strip()
-    return path
-
-def windows_path_to_wsl(path):
-    """Convert a Windows path to WSL path"""
-    if ':' in path:  # Windows path detected
-        return subprocess.check_output(['wslpath', path]).decode().strip()
-    return path
-
-def is_wsl():
-    """Check if running under WSL"""
-    return 'microsoft' in open('/proc/version').read().lower() if os.path.exists('/proc/version') else False
+from wsl_utils import convert_path_if_needed, is_wsl
 
 def list_directories(base_path="/mnt/c/Users"):
     """Return a list of directories at the given path"""
@@ -68,19 +51,39 @@ def process_videos(selected_dir, selected_videos, output_dir, num_frames=5):
 def navigate_to_parent(current_path):
     """Navigate to parent directory"""
     parent = str(Path(current_path).parent)
-    return parent, list_directories(parent)
+    return parent, gr.update(choices=list_directories(parent), value=parent), []  # Also return empty video list
+
+def handle_path_input(path_input):
+    """Handle path input, converting Windows paths to WSL if needed"""
+    converted_path = convert_path_if_needed(path_input, "wsl" if is_wsl() else "windows")
+    return converted_path, gr.update(choices=list_directories(converted_path), value=converted_path), []  # Also return empty video list
+
+def update_current_dir(selected_dir, current):
+    if not selected_dir:
+        return current, gr.update(choices=list_directories(current), value=current), []
+
+    # Join paths properly - selected_dir could be relative or absolute
+    if os.path.isabs(selected_dir):
+        new_path = selected_dir
+    else:
+        new_path = os.path.join(current, selected_dir)
+
+    # Return updated current directory, list of subdirectories, and list of videos
+    return new_path, gr.update(choices=list_directories(new_path), value=new_path), list_videos(new_path)
 
 with gr.Blocks() as app:
     gr.Markdown("# Video Frame Extractor")
 
-    current_path = gr.State("/mnt/c/Users")
-
     with gr.Row():
         with gr.Column(scale=2):
             gr.Markdown("## Navigation")
-            current_dir = gr.Textbox(value="/mnt/c/Users", label="Current Directory")
+            current_dir = gr.Textbox(value="/mnt/d/sync_ai/training", label="Current Directory")
             up_button = gr.Button("Go Up")
-            dir_dropdown = gr.Dropdown(choices=list_directories("/mnt/c/Users"), label="Select Subdirectory")
+            dir_dropdown = gr.Dropdown(
+                value="/mnt/d/sync_ai/training",
+                choices=list_directories("/mnt/d/sync_ai/training"),
+                label="Select Subdirectory"
+            )
 
             with gr.Row():
                 refresh_btn = gr.Button("Refresh")
@@ -99,27 +102,28 @@ with gr.Blocks() as app:
     up_button.click(
         navigate_to_parent,
         [current_dir],
-        [current_dir, dir_dropdown]
+        [current_dir, dir_dropdown, video_selector]  # Update video selector too
     )
 
-    # Update current directory when selecting a subdirectory
-    def update_current_dir(selected_dir, current):
-        if not selected_dir:
-            return current, []
-        new_path = os.path.join(current, os.path.basename(selected_dir))
-        return new_path, list_videos(new_path)
+    # Event for when current_dir is manually changed
+    current_dir.submit(
+        handle_path_input,
+        [current_dir],
+        [current_dir, dir_dropdown, video_selector]  # Update video selector too
+    )
 
+    # Change refreshes both directory and video lists
     dir_dropdown.change(
         update_current_dir,
         [dir_dropdown, current_dir],
-        [current_dir, video_selector]
+        [current_dir, dir_dropdown, video_selector]  # Update dir_dropdown too
     )
 
-    # Refresh current directory
+    # refresh updates subdirectory list
     refresh_btn.click(
-        lambda x: (x, list_videos(x)),
+        lambda x: (x, gr.update(choices=list_directories(x), value=x), list_videos(x)),
         [current_dir],
-        [current_dir, video_selector]
+        [current_dir, dir_dropdown, video_selector]
     )
 
     # Process videos button
