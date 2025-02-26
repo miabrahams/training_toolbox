@@ -91,7 +91,6 @@ type fileResult struct {
 }
 
 func parseDirectoryCommand(root string, dbpath *string) error {
-
 	paths, err := getPngPaths(root)
 	if err != nil {
 		return fmt.Errorf("error getting PNG paths: %w", err)
@@ -109,7 +108,52 @@ func parseDirectoryCommand(root string, dbpath *string) error {
 	})
 }
 
+// getExistingFilePaths retrieves all file paths that are already in the database
+func getExistingFilePaths(db *sql.DB) (map[string]struct{}, error) {
+	rows, err := db.Query("SELECT file_path FROM prompts")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	existingPaths := make(map[string]struct{})
+	for rows.Next() {
+		var path string
+		if err := rows.Scan(&path); err != nil {
+			return nil, err
+		}
+		existingPaths[path] = struct{}{}
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return existingPaths, nil
+}
+
 func parseDirectory(paths []string, db *sql.DB) error {
+	existingPaths, err := getExistingFilePaths(db)
+	if err != nil {
+		return fmt.Errorf("error retrieving existing files: %w", err)
+	}
+
+	// Filter out files that are already in the database
+	var filesToProcess []string
+	for _, path := range paths {
+		if _, exists := existingPaths[path]; !exists {
+			filesToProcess = append(filesToProcess, path)
+		}
+	}
+
+	skipped := len(paths) - len(filesToProcess)
+	fmt.Printf("Found %d files, skipping %d already loaded files, processing %d new files\n",
+		len(paths), skipped, len(filesToProcess))
+
+	if len(filesToProcess) == 0 {
+		fmt.Println("All files are already loaded in the database.")
+		return nil
+	}
 
 	numWorkers := runtime.NumCPU()
 	filesCh := make(chan string)
@@ -125,12 +169,12 @@ func parseDirectory(paths []string, db *sql.DB) error {
 		}
 	}
 	wg.Add(numWorkers)
-	for i := 0; i < numWorkers; i++ {
+	for range numWorkers {
 		go worker()
 	}
 
 	go func() {
-		for _, p := range paths {
+		for _, p := range filesToProcess {
 			filesCh <- p
 		}
 		close(filesCh)
@@ -171,7 +215,7 @@ func parseDirectory(paths []string, db *sql.DB) error {
 			batch = batch[:0]
 		}
 		// Update progress
-		fmt.Printf("\rProcessed %d/%d files", processed, len(paths))
+		fmt.Printf("\rProcessed %d/%d new files", processed, len(filesToProcess))
 	}
 
 	if len(batch) > 0 {
