@@ -51,16 +51,19 @@ def process_videos(selected_dir, selected_videos, output_dir, num_frames=5):
 def navigate_to_parent(current_path):
     """Navigate to parent directory"""
     parent = str(Path(current_path).parent)
-    return parent, gr.update(choices=list_directories(parent), value=parent), []  # Also return empty video list
+    videos = list_videos(parent)
+    return parent, gr.update(choices=list_directories(parent), value=parent), gr.update(choices=videos, value=[])
 
 def handle_path_input(path_input):
     """Handle path input, converting Windows paths to WSL if needed"""
     converted_path = convert_path_if_needed(path_input, "wsl" if is_wsl() else "windows")
-    return converted_path, gr.update(choices=list_directories(converted_path), value=converted_path), []  # Also return empty video list
+    videos = list_videos(converted_path)
+    return converted_path, gr.update(choices=list_directories(converted_path), value=converted_path), gr.update(choices=videos, value=[])
 
 def update_current_dir(selected_dir, current):
     if not selected_dir:
-        return current, gr.update(choices=list_directories(current), value=current), []
+        videos = list_videos(current)
+        return current, gr.update(choices=list_directories(current), value=current), gr.update(choices=videos, value=[])
 
     # Join paths properly - selected_dir could be relative or absolute
     if os.path.isabs(selected_dir):
@@ -68,8 +71,9 @@ def update_current_dir(selected_dir, current):
     else:
         new_path = os.path.join(current, selected_dir)
 
+    videos = list_videos(new_path)
     # Return updated current directory, list of subdirectories, and list of videos
-    return new_path, gr.update(choices=list_directories(new_path), value=new_path), list_videos(new_path)
+    return new_path, gr.update(choices=list_directories(new_path), value=new_path), gr.update(choices=videos, value=[])
 
 with gr.Blocks() as app:
     gr.Markdown("# Video Frame Extractor")
@@ -82,7 +86,8 @@ with gr.Blocks() as app:
             dir_dropdown = gr.Dropdown(
                 value="/mnt/d/sync_ai/training",
                 choices=list_directories("/mnt/d/sync_ai/training"),
-                label="Select Subdirectory"
+                label="Select Subdirectory",
+                allow_custom_value=True
             )
 
             with gr.Row():
@@ -121,7 +126,7 @@ with gr.Blocks() as app:
 
     # refresh updates subdirectory list
     refresh_btn.click(
-        lambda x: (x, gr.update(choices=list_directories(x), value=x), list_videos(x)),
+        lambda x: (x, gr.update(choices=list_directories(x), value=x), gr.update(choices=list_videos(x), value=[])),
         [current_dir],
         [current_dir, dir_dropdown, video_selector]
     )
