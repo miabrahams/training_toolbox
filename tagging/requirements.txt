@@ -1,1 +1,2 @@
 gradio
+ffmpeg-python
