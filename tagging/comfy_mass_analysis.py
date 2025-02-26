@@ -1,5 +1,5 @@
 from collections import Counter
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Set, Optional
 import pprint
 import random
 import json
@@ -11,11 +11,13 @@ import umap
 import hdbscan
 from sentence_transformers import SentenceTransformer
 from sklearn.preprocessing import normalize
-import argparse  # Added for command-line arguments
+import argparse
 from typing import Any
+import os
+import pickle
 
 import sys
-sys.path.append('..')
+sys.path.append('.')
 from lib.comfy_analysis import ComfyImage, extract_positive_prompt
 from lib.prompt_parser import clean_prompt
 
@@ -47,6 +49,44 @@ def cluster_embeddings(embeddings: np.ndarray, min_cluster_size: int = 5) -> np.
     )
     return clusterer.fit_predict(embeddings)
 
+def save_analysis_data(embeddings: np.ndarray, reduced_embeddings: np.ndarray,
+                      clusters: np.ndarray, prompt_texts: List[str],
+                      data_dir: str = '../data'):
+    """Save embeddings, reduced embeddings, and clusters to disk."""
+    os.makedirs(data_dir, exist_ok=True)
+
+    # Save the data
+    np.save(os.path.join(data_dir, 'embeddings.npy'), embeddings)
+    np.save(os.path.join(data_dir, 'reduced_embeddings.npy'), reduced_embeddings)
+    np.save(os.path.join(data_dir, 'clusters.npy'), clusters)
+
+    # Save prompt texts to match with embeddings
+    with open(os.path.join(data_dir, 'prompt_texts.pkl'), 'wb') as f:
+        pickle.dump(prompt_texts, f)
+
+    print(f"Analysis data saved to {data_dir}")
+
+def load_analysis_data(data_dir: str = '../data') -> Tuple[np.ndarray, np.ndarray, np.ndarray, List[str]] | None:
+    """Load embeddings, reduced embeddings, and clusters from disk if available."""
+    embedding_path = os.path.join(data_dir, 'embeddings.npy')
+    reduced_path = os.path.join(data_dir, 'reduced_embeddings.npy')
+    clusters_path = os.path.join(data_dir, 'clusters.npy')
+    prompts_path = os.path.join(data_dir, 'prompt_texts.pkl')
+
+    # Check if all files exist
+    if all(os.path.exists(p) for p in [embedding_path, reduced_path, clusters_path, prompts_path]):
+        print("Loading existing analysis data...")
+        embeddings = np.load(embedding_path)
+        reduced_embeddings = np.load(reduced_path)
+        clusters = np.load(clusters_path)
+
+        with open(prompts_path, 'rb') as f:
+            prompt_texts = pickle.load(f)
+
+        return embeddings, reduced_embeddings, clusters, prompt_texts
+
+    return None
+
 def analyze_prompts(prompt_texts: List[str]) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Generate embeddings, reduce dimensions, and cluster the prompts."""
     # Generate embeddings
@@ -57,8 +97,7 @@ def analyze_prompts(prompt_texts: List[str]) -> Tuple[np.ndarray, np.ndarray, np
     pp.pprint("Reducing dimensions...")
     reduced_embeddings = reduce_dimensions(embeddings)
 
-    # Cluster the reduced embeddings
-    # clusters = cluster_embeddings(reduced_embeddings)
+    # Cluster the embeddings
     pp.pprint("Generating clusters...")
     clusters = cluster_embeddings(embeddings)
 
@@ -68,14 +107,81 @@ def get_representative_prompt(prompts: List[str]) -> str:
     """Select a representative prompt for a cluster at random."""
     return random.choice(prompts) if prompts else ""
 
-def make_cluster_summaries(clusters: np.ndarray, prompts: Dict[str, int], sample_size: int = 5):
+def get_image_paths_from_db(conn: sqlite3.Connection) -> Dict[str, str]:
+    """Extract mapping of prompt to file path from database."""
+    image_paths = {}
+    for row in conn.execute('SELECT file_path, prompt FROM prompts'):
+        try:
+            prompt = json.loads(row[1])
+            filename = row[0]
+            positive = extract_positive_prompt(prompt)
+            image_paths[clean_prompt(positive)] = filename
+        except Exception:
+            pass
+    return image_paths
+
+def identify_screened_clusters(
+    clusters: np.ndarray,
+    prompt_texts: List[str],
+    image_paths: Dict[str, str],
+    screen_dirs: List[str]
+) -> Set[int]:
+    """
+    Identify clusters that have at least one image in the screen directories.
+
+    Args:
+        clusters: Cluster assignments for each prompt
+        prompt_texts: List of prompt texts
+        image_paths: Mapping from prompt to image path
+        screen_dirs: List of directories to screen against
+
+    Returns:
+        Set of cluster IDs that are represented in screen directories
+    """
+    normalized_screen_dirs = [os.path.normpath(d) for d in screen_dirs]
+    screened_clusters = set()
+
+    # Check each prompt
+    for idx, prompt in enumerate(prompt_texts):
+        cluster_id = clusters[idx]
+
+        # Skip noise cluster
+        if cluster_id == -1:
+            continue
+
+        # Check if this prompt's image is in a screened directory
+        image_path = image_paths.get(prompt)
+        if image_path:
+            # Check if this image is in any of the screened directories
+            for screen_dir in normalized_screen_dirs:
+                if os.path.normpath(image_path).startswith(screen_dir):
+                    screened_clusters.add(cluster_id)
+                    break
+
+    return screened_clusters
+
+def make_cluster_summaries(clusters: np.ndarray, prompts: Dict[str, int],
+                           sample_size: int = 5,
+                           image_paths: Optional[Dict[str, str]] = None,
+                           screen_dirs: Optional[List[str]] = None):
     """Print a summary of each cluster with a representative prompt."""
     unique_clusters = np.unique(clusters)
     cluster_summaries = []
 
+    # Identify which clusters to screen out if screening is requested
+    screened_clusters = set()
+    if screen_dirs and image_paths:
+        prompt_texts = list(prompts.keys())
+        screened_clusters = identify_screened_clusters(clusters, prompt_texts, image_paths, screen_dirs)
+        print(f"Found {len(screened_clusters)} clusters represented in screened directories")
+
     for cluster in unique_clusters:
         if cluster == -1:
             continue  # Skip noise cluster
+
+        # Skip this cluster if it's in the screened set
+        if screen_dirs and cluster in screened_clusters:
+            continue
 
         cluster_indices = np.where(clusters == cluster)[0]
         cluster_prompts = [list(prompts.keys())[i] for i in cluster_indices]
@@ -90,21 +196,32 @@ def make_cluster_summaries(clusters: np.ndarray, prompts: Dict[str, int], sample
         # Get common tokens
         common = common_tokens(sample_prompts)
 
+        # Find representative image path if available
+        representative_image = None
+        if image_paths:
+            representative_image = image_paths.get(representative)
+
         cluster_summaries.append({
             'cluster_id': cluster,
             'size': len(cluster_indices),
             'representative': representative,
-            'common_tokens': common[:10] if len(common) > 10 else common  # Limit to top 10 common tokens
+            'common_tokens': common[:10] if len(common) > 10 else common,  # Limit to top 10 common tokens
+            'image_path': representative_image
         })
+
     return cluster_summaries
 
-def print_cluster_summary(cluster_summaries: List[Dict[str, Any]]):
-    # Print the summaries
+def print_cluster_summary(cluster_summaries: List[Dict[str, Any]], show_image_paths: bool = False):
+    """Print the summaries of clusters."""
     print("\n=== CLUSTER SUMMARY ===")
+    print(f"Displaying {len(cluster_summaries)} clusters")
+
     for summary in cluster_summaries:
         print(f"\nCluster {summary['cluster_id']} - {summary['size']} prompts")
         print(f"Common tokens: {', '.join(summary['common_tokens'])}")
         print(f"Representative prompt: {summary['representative']}")
+        if show_image_paths and 'image_path' in summary and summary['image_path']:
+            print(f"Representative image: {summary['image_path']}")
 
 def visualize_clusters(reduced_embeddings: np.ndarray, clusters: np.ndarray,
                       prompts: Dict[str, int], sample_size: int = 100):
@@ -195,45 +312,82 @@ def main():
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description='Analyze and cluster AI image prompts')
     parser.add_argument('--graph', action='store_true', help='Display clustering graphs')
-    parser.add_argument('--db', default='../data/prompts.sqlite', help='Path to SQLite database')
+    parser.add_argument('--db', default='data/prompts.sqlite', help='Path to SQLite database')
     parser.add_argument('--min-cluster-size', type=int, default=5, help='Minimum cluster size')
     parser.add_argument('--sample-size', type=int, default=5, help='Sample size for cluster analysis')
+    parser.add_argument('--data-dir', default='data', help='Directory to save/load analysis data')
+    parser.add_argument('--force-recompute', action='store_true',
+                        help='Force recomputation of embeddings and clusters')
+    parser.add_argument('--screen-dir', action='append', default=[],
+                        help='Directory paths to screen against (can be specified multiple times)')
+    parser.add_argument('--show-paths', action='store_true',
+                        help='Show image file paths in cluster summary')
     args = parser.parse_args()
 
-    # Connect to DB
+    # Connect to DB for image paths regardless
     sqlite_db = args.db
     conn = sqlite3.connect(sqlite_db)
 
-    BadImages: List[ComfyImage] = []
-    positives: List[str] = []
+    # Get image paths for screening
+    image_paths = get_image_paths_from_db(conn)
 
-    for row in conn.execute('SELECT file_path, prompt FROM prompts'):
-        try:
-            prompt = json.loads(row[1])
-            filename = row[0]
-            img = ComfyImage(filename, prompt, {})
-            positive = extract_positive_prompt(prompt)
-            positives.append(positive)
-        except Exception:
-            BadImages.append(img)
-            pass
+    # Try to load existing analysis data first if not forcing recomputation
+    embeddings = None
+    reduced_embeddings = None
+    clusters = None
+    prompt_texts = None
 
-    print(f"{len(positives)} / {len(positives)+len(BadImages)}")
-    if BadImages:
-        print(f"Bad images: {[b.filename for b in BadImages]}")
+    if not args.force_recompute:
+        analysis_data = load_analysis_data(args.data_dir)
+        if analysis_data is not None:
+            embeddings, reduced_embeddings, clusters, prompt_texts = analysis_data
 
-    prompts = Counter([clean_prompt(p) for p in positives])
+    # If no existing data or force recompute, process from scratch
+    if embeddings is None:
+        BadImages: List[ComfyImage] = []
+        positives: List[str] = []
 
-    # Run the analysis
-    prompt_texts = list(prompts.keys())
-    _, reduced_embeddings, clusters = analyze_prompts(prompt_texts)
+        print(f"Loading prompts from database: {sqlite_db}")
+        for row in conn.execute('SELECT file_path, prompt FROM prompts'):
+            try:
+                prompt = json.loads(row[1])
+                filename = row[0]
+                img = ComfyImage(filename, prompt, {})
+                positive = extract_positive_prompt(prompt)
+                positives.append(positive)
+            except Exception:
+                BadImages.append(img)
+                pass
+
+        print(f"{len(positives)} / {len(positives)+len(BadImages)}")
+        if BadImages:
+            print(f"Bad images: {[b.filename for b in BadImages]}")
+
+        prompts = Counter([clean_prompt(p) for p in positives])
+
+        # Run the analysis
+        prompt_texts = list(prompts.keys())
+        embeddings, reduced_embeddings, clusters = analyze_prompts(prompt_texts)
+
+        # Save the analysis data for future use
+        save_analysis_data(embeddings, reduced_embeddings, clusters, prompt_texts, args.data_dir)
+    else:
+        # Create prompts Counter from loaded prompt_texts for compatibility with existing code
+        prompts = Counter(prompt_texts)
+        print(f"Loaded existing analysis data with {len(prompt_texts)} prompts")
 
     # Print cluster summary with representative prompts
-    cluster_summaries = make_cluster_summaries(clusters, prompts, args.sample_size)
+    # Pass screen directories if specified
+    screen_dirs = args.screen_dir if args.screen_dir else None
+    cluster_summaries = make_cluster_summaries(
+        clusters, prompts, args.sample_size,
+        image_paths=image_paths,
+        screen_dirs=screen_dirs
+    )
 
-    print_cluster_summary(cluster_summaries)
+    print_cluster_summary(cluster_summaries, show_image_paths=args.show_paths)
 
-    # Only display visualizations if not suppressed
+    # Only display visualizations if requested
     if args.graph:
         visualize_clusters(reduced_embeddings, clusters, prompts)
         visualize_clusters_with_diffs(reduced_embeddings, clusters, prompts, args.sample_size)
@@ -241,8 +395,14 @@ def main():
     # Print some statistics
     n_clusters = len(np.unique(clusters)) - (1 if -1 in clusters else 0)
     noise_points = np.sum(clusters == -1)
+    total_displayed = len(cluster_summaries)
+
     print("\nAnalysis Results:")
     print(f"Number of clusters: {n_clusters}")
+    print(f"Clusters displayed: {total_displayed}")
+    if screen_dirs:
+        print(f"Clusters filtered out by screening: {n_clusters - total_displayed}")
+        print(f"Screened directories: {screen_dirs}")
     print(f"Noise points: {noise_points}")
     print(f"Total prompts: {len(prompt_texts)}")
 
