@@ -195,7 +195,7 @@ def main():
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description='Analyze and cluster AI image prompts')
     parser.add_argument('--graph', action='store_true', help='Display clustering graphs')
-    parser.add_argument('--db', default='../golang/data/prompts.sqlite', help='Path to SQLite database')
+    parser.add_argument('--db', default='../data/prompts.sqlite', help='Path to SQLite database')
     parser.add_argument('--min-cluster-size', type=int, default=5, help='Minimum cluster size')
     parser.add_argument('--sample-size', type=int, default=5, help='Sample size for cluster analysis')
     args = parser.parse_args()
