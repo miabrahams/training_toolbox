@@ -11,7 +11,8 @@ import umap
 import hdbscan
 from sentence_transformers import SentenceTransformer
 from sklearn.preprocessing import normalize
-
+import argparse  # Added for command-line arguments
+from typing import Any
 
 import sys
 sys.path.append('..')
@@ -21,35 +22,6 @@ from lib.prompt_parser import clean_prompt
 pp = pprint.PrettyPrinter(width=240)
 
 
-# Connect to DB
-sqlite_db = '/home/abrahams/training_toolbox/golang/internal/testdata/prompts.sqlite'
-
-conn = sqlite3.connect(sqlite_db)
-# Iterate over prompt strings in db
-
-BadImages: List[ComfyImage] = []
-positives: List[str] = []
-
-for row in conn.execute('SELECT file_path, prompt FROM prompts'):
-    try:
-        prompt = json.loads(row[1])
-        filename = row[0]
-        img = ComfyImage(filename, prompt, {})
-        positive = extract_positive_prompt(prompt)
-        positives.append(positive)
-    except Exception:
-        BadImages.append(img)
-        pass
-
-print(f"{len(positives)} / {len(positives)+len(BadImages)}")
-
-print(BadImages[0].filename)
-
-prompts = Counter([clean_prompt(p) for p in positives])
-
-
-
-# Add after the existing prompts Counter code
 def generate_embeddings(texts: List[str], model_name: str = 'all-mpnet-base-v2') -> np.ndarray:
     """Generate embeddings for a list of text prompts."""
     model = SentenceTransformer(model_name)
@@ -78,17 +50,61 @@ def cluster_embeddings(embeddings: np.ndarray, min_cluster_size: int = 5) -> np.
 def analyze_prompts(prompt_texts: List[str]) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Generate embeddings, reduce dimensions, and cluster the prompts."""
     # Generate embeddings
+    pp.pprint("Generating embeddings...")
     embeddings = generate_embeddings(prompt_texts)
 
     # Reduce dimensions for visualization
+    pp.pprint("Reducing dimensions...")
     reduced_embeddings = reduce_dimensions(embeddings)
 
     # Cluster the reduced embeddings
     # clusters = cluster_embeddings(reduced_embeddings)
+    pp.pprint("Generating clusters...")
     clusters = cluster_embeddings(embeddings)
 
     return embeddings, reduced_embeddings, clusters
 
+def get_representative_prompt(prompts: List[str]) -> str:
+    """Select a representative prompt for a cluster at random."""
+    return random.choice(prompts) if prompts else ""
+
+def make_cluster_summaries(clusters: np.ndarray, prompts: Dict[str, int], sample_size: int = 5):
+    """Print a summary of each cluster with a representative prompt."""
+    unique_clusters = np.unique(clusters)
+    cluster_summaries = []
+
+    for cluster in unique_clusters:
+        if cluster == -1:
+            continue  # Skip noise cluster
+
+        cluster_indices = np.where(clusters == cluster)[0]
+        cluster_prompts = [list(prompts.keys())[i] for i in cluster_indices]
+
+        # Select a representative prompt
+        representative = get_representative_prompt(cluster_prompts)
+
+        # Get sample prompts for analysis
+        sample_indices = random.sample(list(cluster_indices), min(sample_size, len(cluster_indices)))
+        sample_prompts = [list(prompts.keys())[i] for i in sample_indices]
+
+        # Get common tokens
+        common = common_tokens(sample_prompts)
+
+        cluster_summaries.append({
+            'cluster_id': cluster,
+            'size': len(cluster_indices),
+            'representative': representative,
+            'common_tokens': common[:10] if len(common) > 10 else common  # Limit to top 10 common tokens
+        })
+    return cluster_summaries
+
+def print_cluster_summary(cluster_summaries: List[Dict[str, Any]]):
+    # Print the summaries
+    print("\n=== CLUSTER SUMMARY ===")
+    for summary in cluster_summaries:
+        print(f"\nCluster {summary['cluster_id']} - {summary['size']} prompts")
+        print(f"Common tokens: {', '.join(summary['common_tokens'])}")
+        print(f"Representative prompt: {summary['representative']}")
 
 def visualize_clusters(reduced_embeddings: np.ndarray, clusters: np.ndarray,
                       prompts: Dict[str, int], sample_size: int = 100):
@@ -175,20 +191,60 @@ def visualize_clusters_with_diffs(reduced_embeddings: np.ndarray, clusters: np.n
         # Run common diff analysis on these sample prompts
         analyze_cluster_diffs(sample_prompts[:5])  # analyze first 5 prompts in the cluster
 
+def main():
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(description='Analyze and cluster AI image prompts')
+    parser.add_argument('--graph', action='store_true', help='Display clustering graphs')
+    parser.add_argument('--db', default='../golang/data/prompts.sqlite', help='Path to SQLite database')
+    parser.add_argument('--min-cluster-size', type=int, default=5, help='Minimum cluster size')
+    parser.add_argument('--sample-size', type=int, default=5, help='Sample size for cluster analysis')
+    args = parser.parse_args()
 
-# Run the analysis
-prompt_texts = list(prompts.keys())
-embeddings, reduced_embeddings, clusters = analyze_prompts(prompt_texts)
-visualize_clusters(reduced_embeddings, clusters, prompts)
+    # Connect to DB
+    sqlite_db = args.db
+    conn = sqlite3.connect(sqlite_db)
 
-# Replace your previous visualize_clusters call with:
-visualize_clusters_with_diffs(reduced_embeddings, clusters, prompts)
+    BadImages: List[ComfyImage] = []
+    positives: List[str] = []
 
+    for row in conn.execute('SELECT file_path, prompt FROM prompts'):
+        try:
+            prompt = json.loads(row[1])
+            filename = row[0]
+            img = ComfyImage(filename, prompt, {})
+            positive = extract_positive_prompt(prompt)
+            positives.append(positive)
+        except Exception:
+            BadImages.append(img)
+            pass
 
-# Print some statistics
-n_clusters = len(np.unique(clusters)) - (1 if -1 in clusters else 0)
-noise_points = np.sum(clusters == -1)
-print("\nAnalysis Results:")
-print(f"Number of clusters: {n_clusters}")
-print(f"Noise points: {noise_points}")
-print(f"Total prompts: {len(prompt_texts)}")
+    print(f"{len(positives)} / {len(positives)+len(BadImages)}")
+    if BadImages:
+        print(f"Bad images: {[b.filename for b in BadImages]}")
+
+    prompts = Counter([clean_prompt(p) for p in positives])
+
+    # Run the analysis
+    prompt_texts = list(prompts.keys())
+    _, reduced_embeddings, clusters = analyze_prompts(prompt_texts)
+
+    # Print cluster summary with representative prompts
+    cluster_summaries = make_cluster_summaries(clusters, prompts, args.sample_size)
+
+    print_cluster_summary(cluster_summaries)
+
+    # Only display visualizations if not suppressed
+    if args.graph:
+        visualize_clusters(reduced_embeddings, clusters, prompts)
+        visualize_clusters_with_diffs(reduced_embeddings, clusters, prompts, args.sample_size)
+
+    # Print some statistics
+    n_clusters = len(np.unique(clusters)) - (1 if -1 in clusters else 0)
+    noise_points = np.sum(clusters == -1)
+    print("\nAnalysis Results:")
+    print(f"Number of clusters: {n_clusters}")
+    print(f"Noise points: {noise_points}")
+    print(f"Total prompts: {len(prompt_texts)}")
+
+if __name__ == "__main__":
+    main()
