@@ -16,6 +16,7 @@ from typing import Any
 import os
 import pickle
 import itertools
+import re
 
 import sys
 sys.path.append('.')
@@ -700,6 +701,167 @@ def cmd_analyze_dir(args, clusters, prompt_texts, image_paths):
     """Command to analyze a specific directory's contribution to clusters."""
     analyze_specific_directory(args, clusters, prompt_texts, image_paths)
 
+def normalize_tag_diff(tag: str) -> str:
+    """
+    Normalize a tag difference by removing the +/- prefix and any
+    additional formatting, returning just the tag content.
+    """
+    # Remove +/- prefix and any whitespace
+    normalized = tag.strip()
+    if normalized.startswith('+') or normalized.startswith('-'):
+        normalized = normalized[1:].strip()
+    return normalized
+
+def extract_normalized_diffs(prompt_a: str, prompt_b: str) -> List[str]:
+    """
+    Extract normalized differences between two prompts.
+
+    Args:
+        prompt_a: First prompt
+        prompt_b: Second prompt
+
+    Returns:
+        List of normalized tag differences
+    """
+    # Split prompts into tag sets
+    tags_a = set(tag.strip() for tag in prompt_a.split(',') if tag.strip())
+    tags_b = set(tag.strip() for tag in prompt_b.split(',') if tag.strip())
+
+    # Find differences in both directions
+    diffs = list(tags_a - tags_b) + list(tags_b - tags_a)
+
+    return diffs
+
+def get_within_cluster_diffs(clusters: np.ndarray, prompt_texts: List[str],
+                            sample_size: int = 10, max_clusters: int | None = None) -> Counter:
+    """
+    Analyze differences within clusters to identify common modifiers.
+
+    Args:
+        clusters: Cluster assignments
+        prompt_texts: List of prompt texts
+        sample_size: Number of prompts to sample within each cluster
+        max_clusters: Maximum number of clusters to analyze (None for all)
+
+    Returns:
+        Counter of most common tag differences
+    """
+    # Get unique clusters (excluding noise)
+    unique_clusters = [c for c in np.unique(clusters) if c != -1]
+
+    if max_clusters is not None:
+        random.shuffle(unique_clusters)
+        unique_clusters = unique_clusters[:min(max_clusters, len(unique_clusters))]
+
+    # Group prompts by cluster
+    cluster_prompts = defaultdict(list)
+    for idx, prompt in enumerate(prompt_texts):
+        cluster_id = clusters[idx]
+        if cluster_id != -1:  # Skip noise cluster
+            cluster_prompts[cluster_id].append(prompt)
+
+    # Collect all diffs
+    all_diffs = []
+
+    # For each cluster, sample prompts and compare them
+    for cluster_id in unique_clusters:
+        cluster_prompt_list = cluster_prompts[cluster_id]
+
+        if len(cluster_prompt_list) < 2:  # Need at least 2 prompts to compare
+            continue
+
+        # Sample prompts
+        if len(cluster_prompt_list) <= sample_size:
+            sampled_prompts = cluster_prompt_list
+        else:
+            sampled_prompts = random.sample(cluster_prompt_list, sample_size)
+
+        # Generate all pairs from samples
+        for i in range(len(sampled_prompts)):
+            for j in range(i+1, len(sampled_prompts)):
+                diffs = extract_normalized_diffs(sampled_prompts[i], sampled_prompts[j])
+                all_diffs.extend(diffs)
+
+    return Counter(all_diffs)
+
+def get_common_modifiers(clusters: np.ndarray, prompt_texts: List[str],
+                       sample_size: int = 10, max_clusters: int | None = None,
+                       top_n: int = 50) -> List[Tuple[str, int]]:
+    """
+    Identify common modifiers across clusters.
+
+    Args:
+        clusters: Cluster assignments
+        prompt_texts: List of prompt texts
+        sample_size: Number of prompts to sample within each cluster
+        max_clusters: Maximum number of clusters to analyze (None for all)
+        top_n: Number of top modifiers to return
+
+    Returns:
+        List of (modifier, count) tuples
+    """
+    # Get diffs from within clusters
+    diffs = get_within_cluster_diffs(clusters, prompt_texts, sample_size, max_clusters)
+
+    # Return top N most common
+    return diffs.most_common(top_n)
+
+def analyze_modifier_context(modifier: str, prompt_texts: List[str],
+                           max_examples: int = 5) -> List[str]:
+    """
+    Analyze the context in which a modifier is used.
+
+    Args:
+        modifier: The tag modifier to analyze
+        prompt_texts: List of prompt texts
+        max_examples: Maximum number of example prompts to return
+
+    Returns:
+        List of example prompts containing the modifier
+    """
+    # Find prompts containing the modifier
+    examples = []
+    pattern = re.compile(r'\b' + re.escape(modifier) + r'\b')
+
+    for prompt in prompt_texts:
+        if pattern.search(prompt):
+            examples.append(prompt)
+            if len(examples) >= max_examples:
+                break
+
+    return examples
+
+def cmd_analyze_modifiers(args, clusters, prompt_texts, image_paths):
+    """Command to analyze common tag modifiers across clusters."""
+    print("\n=== COMMON TAG MODIFIER ANALYSIS ===")
+
+    modifiers = get_common_modifiers(
+        clusters,
+        prompt_texts,
+        sample_size=args.sample_size,
+        max_clusters=args.max_clusters,
+        top_n=args.top_n
+    )
+
+    print(f"\nTop {len(modifiers)} tag modifiers across clusters:")
+    for modifier, count in modifiers:
+        print(f"{modifier}: {count} occurrences")
+
+        # If requested, show example contexts
+        if args.show_examples:
+            examples = analyze_modifier_context(
+                modifier,
+                prompt_texts,
+                max_examples=args.max_examples
+            )
+            print(f"  Examples ({len(examples)}):")
+            for i, example in enumerate(examples):
+                # Truncate examples to keep output manageable
+                if len(example) > 100:
+                    example = example[:100] + "..."
+                print(f"    {i+1}. {example}")
+            print()
+
 def main():
     # Create the top-level parser
     parser = argparse.ArgumentParser(
@@ -711,6 +873,7 @@ commands:
   visualize   Visualize clusters with matplotlib
   analyze-dir Analyze how a specific directory contributes to clusters
   tags        Analyze tag distribution across clusters
+  modifiers   Analyze common tag modifiers across clusters
 ''')
 
     parser.add_argument('--db', default='data/prompts.sqlite', help='Path to SQLite database')
@@ -744,6 +907,18 @@ commands:
     parser_tags.add_argument('--cluster-pairs', type=int, default=5, help='Number of random cluster pairs to analyze')
     parser_tags.add_argument('--sample-size', type=int, default=10, help='Sample size per cluster for pair analysis')
 
+    # Create parser for the "modifiers" command
+    parser_mods = subparsers.add_parser('modifiers', help='Analyze common tag modifiers')
+    parser_mods.add_argument('--top-n', type=int, default=50, help='Show top N most common modifiers')
+    parser_mods.add_argument('--sample-size', type=int, default=20,
+                            help='Number of prompts to sample within each cluster')
+    parser_mods.add_argument('--max-clusters', type=int, default=None,
+                            help='Maximum number of clusters to analyze (default: all)')
+    parser_mods.add_argument('--show-examples', action='store_true',
+                            help='Show example prompts for each modifier')
+    parser_mods.add_argument('--max-examples', type=int, default=3,
+                            help='Maximum number of examples to show per modifier')
+
     args = parser.parse_args()
 
     if args.command is None:
@@ -766,6 +941,8 @@ commands:
         cmd_analyze_dir(args, clusters, prompt_texts, image_paths)
     elif args.command == 'tags':
         cmd_analyze_tags(args, clusters, prompt_texts, image_paths)
+    elif args.command == 'modifiers':
+        cmd_analyze_modifiers(args, clusters, prompt_texts, image_paths)
 
 if __name__ == "__main__":
     main()

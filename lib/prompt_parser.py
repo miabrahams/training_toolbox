@@ -134,7 +134,7 @@ special_tags += ['explicit', 'questionable', 'safe']
 special_tags += ['illustration', 'digital illustration art', 'official art', 'edit']
 special_tags += ['masterpiece', 'best quality', 'absurdres', 'hires', 'hi res', 'very awa', 'very aesthetic', '()',]
 special_tags += ['newest', 'year 2022', 'year 2023', 'year 2024', '2022', '2023', '2024']
-ignore_tags = ['trmk2', 'csr style', ]
+ignore_tags = ['trmk2', 'csr style', "tan fur", "red body", "realistic", "solo", "markings"]
 
 def remove_extra_commas(prompt: str) -> str:
     """
@@ -162,7 +162,7 @@ def clean_prompt(prompt: str) -> str:
     # First, strip out markup
     prompt = strip_prompt_markup(prompt)
     prompt = prompt.lower()
-    for tag in special_tags:
+    for tag in special_tags + ignore_tags:
         prompt = prompt.replace(tag + ', ', '').replace(tag, '')
     prompt = prompt.strip().replace('\n', ' ').replace('\r', ' ')
     # Remove redundant commas/punctuation
