@@ -13,8 +13,6 @@ from tqdm import tqdm
 import argparse
 from PIL import Image, ImageFile
 
-import sys
-sys.path.append('..')
 from lib.metadata import tags_from_metadata
 from lib.prompt_parser import parse_prompt_attention
 
