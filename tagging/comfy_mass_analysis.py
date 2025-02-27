@@ -1,4 +1,4 @@
-from collections import Counter
+from collections import Counter, defaultdict
 from typing import List, Tuple, Dict, Set, Optional
 import pprint
 import random
@@ -15,6 +15,7 @@ import argparse
 from typing import Any
 import os
 import pickle
+import itertools
 
 import sys
 sys.path.append('.')
@@ -508,24 +509,246 @@ def analyze_specific_directory(args, clusters, prompt_texts, image_paths):
             args.analyze_dir, clusters, prompt_texts, image_paths, args.noise_sample
         )
 
+def extract_tags_from_prompts(prompts: List[str], delimiter: str = ',') -> Counter:
+    """Extract and count individual tags from a list of prompts."""
+    all_tags = []
+    for prompt in prompts:
+        tags = [tag.strip() for tag in prompt.split(delimiter) if tag.strip()]
+        all_tags.extend(tags)
+    return Counter(all_tags)
+
+def analyze_cluster_tag_distribution(clusters: np.ndarray, prompt_texts: List[str]) -> Dict[int, Counter]:
+    """Analyze tag distribution within each cluster."""
+    cluster_tags = {}
+
+    # Group prompts by cluster
+    for idx, prompt in enumerate(prompt_texts):
+        cluster_id = clusters[idx]
+        if cluster_id not in cluster_tags:
+            cluster_tags[cluster_id] = []
+        cluster_tags[cluster_id].append(prompt)
+
+    # Extract tags from each cluster's prompts
+    cluster_tag_counts = {}
+    for cluster_id, prompts in cluster_tags.items():
+        cluster_tag_counts[cluster_id] = extract_tags_from_prompts(prompts)
+
+    return cluster_tag_counts
+
+def analyze_cluster_pair_diffs(
+    clusters: np.ndarray,
+    prompt_texts: List[str],
+    max_pairs: int = 10,
+    sample_size: int = 5
+) -> Dict[Tuple[int, int], Counter]:
+    """
+    Analyze tag differences between random pairs of clusters.
+
+    Args:
+        clusters: Cluster assignments
+        prompt_texts: List of prompt texts
+        max_pairs: Maximum number of cluster pairs to analyze
+        sample_size: Number of prompts to sample from each cluster
+
+    Returns:
+        Dictionary mapping cluster pairs to tag difference counters
+    """
+    # Get unique clusters (excluding noise)
+    unique_clusters = [c for c in np.unique(clusters) if c != -1]
+
+    # If we have fewer than 2 clusters, we can't make pairs
+    if len(unique_clusters) < 2:
+        return {}
+
+    # Choose random pairs
+    all_pairs = list(itertools.combinations(unique_clusters, 2))
+    random.shuffle(all_pairs)
+    selected_pairs = all_pairs[:min(max_pairs, len(all_pairs))]
+
+    # Group prompts by cluster
+    cluster_prompts = defaultdict(list)
+    for idx, prompt in enumerate(prompt_texts):
+        cluster_id = clusters[idx]
+        if cluster_id != -1:  # Skip noise cluster
+            cluster_prompts[cluster_id].append(prompt)
+
+    # Analyze differences between pairs
+    pair_diffs = {}
+    for cluster_a, cluster_b in selected_pairs:
+        # Sample prompts from each cluster
+        prompts_a = random.sample(cluster_prompts[cluster_a], min(sample_size, len(cluster_prompts[cluster_a])))
+        prompts_b = random.sample(cluster_prompts[cluster_b], min(sample_size, len(cluster_prompts[cluster_b])))
+
+        # Extract tags
+        tags_a = set()
+        for prompt in prompts_a:
+            tags_a.update([tag.strip() for tag in prompt.split(',') if tag.strip()])
+
+        tags_b = set()
+        for prompt in prompts_b:
+            tags_b.update([tag.strip() for tag in prompt.split(',') if tag.strip()])
+
+        # Find differences
+        diff_a_not_b = tags_a - tags_b
+        diff_b_not_a = tags_b - tags_a
+
+        # Store as a counter for easy analysis
+        diff_counter = Counter()
+        for tag in diff_a_not_b:
+            diff_counter[f"{tag} (in cluster {cluster_a})"] += 1
+        for tag in diff_b_not_a:
+            diff_counter[f"{tag} (in cluster {cluster_b})"] += 1
+
+        pair_diffs[(cluster_a, cluster_b)] = diff_counter
+
+    return pair_diffs
+
+def cmd_analyze_tags(args, clusters, prompt_texts, image_paths):
+    """Command to analyze tag distribution across all prompts and clusters."""
+    print("\n=== TAG DISTRIBUTION ANALYSIS ===")
+
+    # Get overall tag distribution
+    all_tags = extract_tags_from_prompts(prompt_texts)
+    most_common = all_tags.most_common(args.top_n)
+
+    print(f"\nTop {args.top_n} tags across all prompts:")
+    for tag, count in most_common:
+        print(f"{tag}: {count}")
+
+    # Get per-cluster tag distribution
+    cluster_tags = analyze_cluster_tag_distribution(clusters, prompt_texts)
+
+    print("\nTop tags per cluster:")
+    for cluster_id in sorted(cluster_tags.keys()):
+        if cluster_id == -1:  # Skip noise cluster unless specifically requested
+            if not args.include_noise:
+                continue
+        tags = cluster_tags[cluster_id].most_common(5)  # Top 5 per cluster
+        print(f"\nCluster {cluster_id}:")
+        for tag, count in tags:
+            print(f"  {tag}: {count}")
+
+    # Analyze differences between random cluster pairs
+    if args.cluster_pairs > 0:
+        print("\n=== CLUSTER PAIR TAG DIFFERENCES ===")
+        pair_diffs = analyze_cluster_pair_diffs(
+            clusters, prompt_texts, max_pairs=args.cluster_pairs, sample_size=args.sample_size
+        )
+
+        for (cluster_a, cluster_b), diff_tags in pair_diffs.items():
+            print(f"\nDifferences between Cluster {cluster_a} and Cluster {cluster_b}:")
+            for tag, _ in diff_tags.most_common(10):  # Top 10 differences
+                print(f"  {tag}")
+
+def cmd_visualize(args, clusters, prompt_texts, reduced_embeddings, prompts, image_paths):
+    """Command to visualize clusters."""
+    if args.directory:
+        # Filter for images in specified directory
+        dir_prompt_indices = []
+        for idx, prompt in enumerate(prompt_texts):
+            image_path = image_paths.get(prompt)
+            if image_path and os.path.normpath(image_path).startswith(os.path.normpath(args.directory)):
+                dir_prompt_indices.append(idx)
+
+        # Create filtered arrays
+        if dir_prompt_indices:
+            filtered_reduced = reduced_embeddings[dir_prompt_indices]
+            filtered_clusters = clusters[dir_prompt_indices]
+            filtered_prompts = {prompt_texts[i]: prompts[prompt_texts[i]] for i in dir_prompt_indices}
+
+            print(f"Visualizing {len(dir_prompt_indices)} prompts from {args.directory}")
+            visualize_clusters(filtered_reduced, filtered_clusters, filtered_prompts, args.sample_size)
+
+            if args.with_diffs:
+                visualize_clusters_with_diffs(filtered_reduced, filtered_clusters, filtered_prompts, args.sample_size)
+        else:
+            print(f"No prompts found in directory: {args.directory}")
+    else:
+        # Visualize all
+        visualize_clusters(reduced_embeddings, clusters, prompts, args.sample_size)
+
+        if args.with_diffs:
+            visualize_clusters_with_diffs(reduced_embeddings, clusters, prompts, args.sample_size)
+
+def cmd_summary(args, clusters, prompt_texts, reduced_embeddings, prompts, image_paths):
+    """Command to show cluster summaries."""
+    screen_dirs = args.screen_dir if args.screen_dir else None
+
+    cluster_summaries = make_cluster_summaries(
+        clusters, prompts, args.sample_size,
+        image_paths=image_paths,
+        screen_dirs=screen_dirs
+    )
+
+    print_cluster_summary(cluster_summaries, show_image_paths=args.show_paths)
+
+    # Print some statistics
+    n_clusters = len(np.unique(clusters)) - (1 if -1 in clusters else 0)
+    noise_points = np.sum(clusters == -1)
+    total_displayed = len(cluster_summaries)
+
+    print("\nAnalysis Results:")
+    print(f"Number of clusters: {n_clusters}")
+    print(f"Clusters displayed: {total_displayed}")
+    if screen_dirs:
+        print(f"Clusters filtered out by screening: {n_clusters - total_displayed}")
+        print(f"Screened directories: {screen_dirs}")
+    print(f"Noise points: {noise_points}")
+    print(f"Total prompts: {len(prompt_texts)}")
+
+def cmd_analyze_dir(args, clusters, prompt_texts, image_paths):
+    """Command to analyze a specific directory's contribution to clusters."""
+    analyze_specific_directory(args, clusters, prompt_texts, image_paths)
+
 def main():
-    # Parse command-line arguments
-    parser = argparse.ArgumentParser(description='Analyze and cluster AI image prompts')
-    parser.add_argument('--graph', action='store_true', help='Display clustering graphs')
+    # Create the top-level parser
+    parser = argparse.ArgumentParser(
+        description='AI Prompt Cluster Analysis Tool',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='''
+commands:
+  summary     Show a summary of all clusters
+  visualize   Visualize clusters with matplotlib
+  analyze-dir Analyze how a specific directory contributes to clusters
+  tags        Analyze tag distribution across clusters
+''')
+
     parser.add_argument('--db', default='data/prompts.sqlite', help='Path to SQLite database')
-    parser.add_argument('--min-cluster-size', type=int, default=5, help='Minimum cluster size')
-    parser.add_argument('--sample-size', type=int, default=5, help='Sample size for cluster analysis')
-    parser.add_argument('--noise-sample', type=int, default=10,
-                       help='Number of noise cluster samples to display for directory analysis')
     parser.add_argument('--data-dir', default='data', help='Directory to save/load analysis data')
-    parser.add_argument('--force-recompute', action='store_true',
-                        help='Force recomputation of embeddings and clusters')
-    parser.add_argument('--screen-dir', action='append', default=[],
-                        help='Directory paths to screen against (can be specified multiple times)')
-    parser.add_argument('--show-paths', action='store_true',
-                        help='Show image file paths in cluster summary')
-    parser.add_argument('--analyze-dir', help='Directory to analyze for cluster contributions')
+    parser.add_argument('--force-recompute', action='store_true', help='Force recomputation of embeddings and clusters')
+
+    subparsers = parser.add_subparsers(dest='command', help='Command to execute')
+
+    # Create parser for the "summary" command
+    parser_summary = subparsers.add_parser('summary', help='Show cluster summaries')
+    parser_summary.add_argument('--sample-size', type=int, default=5, help='Sample size for cluster analysis')
+    parser_summary.add_argument('--screen-dir', action='append', default=[], help='Directory paths to screen against')
+    parser_summary.add_argument('--show-paths', action='store_true', help='Show image file paths in summary')
+
+    # Create parser for the "visualize" command
+    parser_visual = subparsers.add_parser('visualize', help='Visualize clusters')
+    parser_visual.add_argument('--sample-size', type=int, default=100, help='Sample size for visualization')
+    parser_visual.add_argument('--with-diffs', action='store_true', help='Show diff analysis in visualization')
+    parser_visual.add_argument('--directory', help='Only visualize prompts from this directory')
+
+    # Create parser for the "analyze-dir" command
+    parser_analyze = subparsers.add_parser('analyze-dir', help='Analyze directory contributions')
+    parser_analyze.add_argument('analyze_dir', help='Directory to analyze for cluster contributions')
+    parser_analyze.add_argument('--sample-size', type=int, default=5, help='Sample size for cluster analysis')
+    parser_analyze.add_argument('--noise-sample', type=int, default=10, help='Number of noise samples to show')
+
+    # Create parser for the "tags" command
+    parser_tags = subparsers.add_parser('tags', help='Analyze tag distribution')
+    parser_tags.add_argument('--top-n', type=int, default=20, help='Show top N most common tags')
+    parser_tags.add_argument('--include-noise', action='store_true', help='Include noise cluster in analysis')
+    parser_tags.add_argument('--cluster-pairs', type=int, default=5, help='Number of random cluster pairs to analyze')
+    parser_tags.add_argument('--sample-size', type=int, default=10, help='Sample size per cluster for pair analysis')
+
     args = parser.parse_args()
+
+    if args.command is None:
+        parser.print_help()
+        return
 
     # Connect to DB for image paths
     conn = sqlite3.connect(args.db)
@@ -534,11 +757,15 @@ def main():
     # Load or compute the analysis data
     embeddings, reduced_embeddings, clusters, prompt_texts, prompts = load_or_compute_analysis_data(args, conn)
 
-    # Run cluster analysis and visualization
-    run_cluster_analysis(args, clusters, prompts, prompt_texts, reduced_embeddings, image_paths)
-
-    # If requested, analyze a specific directory's contributions
-    analyze_specific_directory(args, clusters, prompt_texts, image_paths)
+    # Execute the appropriate command
+    if args.command == 'summary':
+        cmd_summary(args, clusters, prompt_texts, reduced_embeddings, prompts, image_paths)
+    elif args.command == 'visualize':
+        cmd_visualize(args, clusters, prompt_texts, reduced_embeddings, prompts, image_paths)
+    elif args.command == 'analyze-dir':
+        cmd_analyze_dir(args, clusters, prompt_texts, image_paths)
+    elif args.command == 'tags':
+        cmd_analyze_tags(args, clusters, prompt_texts, image_paths)
 
 if __name__ == "__main__":
     main()
