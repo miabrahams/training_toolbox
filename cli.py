@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import argparse
-import sys
-from tag_analyzer import TagAnalyzer, create_analyzer
+from src.tag_analyzer import create_analyzer
 
 def main():
     # Create the top-level parser
