@@ -23,7 +23,7 @@ def extract_frames(video_path: Path, output_dir, max_frames=30):
     # Extract frames
     for i in range(1, num_frames + 1):
         time_pos = interval * i
-        output_file = video_output_dir / f"frame_{i:03d}.jpg"
+        output_file = video_output_dir / f"{video_name}-frame_{i:03d}.jpg"
 
         # Use ffmpeg-python's fluent interface
         (
