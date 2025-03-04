@@ -1,3 +1,4 @@
+import random
 import gradio as gr
 import os
 import numpy as np
@@ -218,6 +219,198 @@ def analyze_modifiers(top_n=50, sample_size=20, max_clusters=None,
 
     progress(1.0, "Modifier analysis complete!")
     return md_output
+
+def generate_visualization_fn(analyzer, sample_size, directory, with_diffs):
+    if not analyzer:
+        return None, "### Error\n\nPlease load data first.", None, None
+
+    try:
+        result = analyzer.generate_visualization(
+            sample_size=sample_size,
+            directory=directory if directory else None,
+            with_diffs=with_diffs
+        )
+
+        if "error" in result:
+            return None, f"### Error\n\n{result['error']}", None, None
+
+        # Generate matplotlib plot
+        fig = plt.figure(figsize=(10, 8))
+
+        # Get data from points
+        x = [p["x"] for p in result["points"]]
+        y = [p["y"] for p in result["points"]]
+        clusters = [p["cluster"] for p in result["points"]]
+
+        # Plot points
+        scatter = plt.scatter(x, y, c=clusters, cmap='tab20', alpha=0.6, s=10)
+        plt.colorbar(scatter, label="Cluster")
+        plt.title('Prompt Clusters')
+        plt.xlabel('UMAP Dimension 1')
+        plt.ylabel('UMAP Dimension 2')
+
+        # Get cluster samples for display
+        cluster_samples_dict = {}
+        for cluster_id, data in result["cluster_samples"].items():
+            cluster_samples_dict[cluster_id] = {
+                "size": data["size"],
+                "common_tokens": data["common_tokens"],
+                "sample": random.choice(data["samples"]) # One sample per cluster
+            }
+
+        # Create stats object
+        vis_stats_dict = {
+            "total_clusters": result["total_clusters"],
+            "total_points": result["total_points"],
+            "noise_points": result["noise_points"]
+        }
+
+        return fig, None, cluster_samples_dict, vis_stats_dict
+    except Exception as e:
+        return None, f"### Error\n\n{str(e)}", None, None
+
+def generate_summary(analyzer, sample_size, screen_dirs_str, show_paths):
+    if not analyzer:
+        return "### Error\n\nPlease load data first.", {"error": "No data loaded"}
+
+    # Process screen directories
+    screen_dirs = None
+    if screen_dirs_str:
+        screen_dirs = [d.strip() for d in screen_dirs_str.split(',') if d.strip()]
+
+    try:
+        result = analyzer.get_cluster_summary(
+            sample_size=sample_size,
+            screen_dirs=screen_dirs,
+            show_paths=show_paths
+        )
+
+        # Format output for Markdown
+        md_output = "### Cluster Summary\n\n"
+        for summary in result['summaries']:
+            md_output += f"#### Cluster {summary['cluster_id']} - {summary['size']} prompts\n\n"
+            md_output += f"Common tokens: {', '.join(summary['common_tokens'])}\n\n"
+            md_output += f"Representative prompt: {summary['representative']}\n\n"
+            if show_paths and 'image_path' in summary and summary['image_path']:
+                md_output += f"Representative image: {summary['image_path']}\n\n"
+            md_output += "---\n\n"
+
+        return md_output, result['stats']
+    except Exception as e:
+        return f"### Error\n\n{str(e)}", {"error": str(e)}
+
+def analyze_directory_fn(analyzer, directory, sample_size, noise_sample):
+    if not analyzer:
+        return "### Error\n\nPlease load data first.", {"error": "No data loaded"}, None
+
+    try:
+        result = analyzer.analyze_directory(
+            directory=directory,
+            sample_size=sample_size,
+            noise_sample=noise_sample
+        )
+
+        # Format output for Markdown
+        md_output = f"### Directory Analysis: {result['directory']}\n\n"
+        md_output += f"Total images: {result['stats']['total_images']}\n\n"
+        md_output += f"Clustered images: {result['stats']['clustered_images']}\n\n"
+        md_output += f"Noise images: {result['stats']['noise_images']}\n\n"
+        md_output += f"Contributing to {result['stats']['cluster_count']} clusters\n\n"
+
+        # Add cluster distribution
+        md_output += "#### Cluster Distribution\n\n"
+        for cluster_id, data in sorted(
+            [(int(k), v) for k, v in result['clusters'].items()],
+            key=lambda x: x[1]['count'],
+            reverse=True
+        ):
+            md_output += f"Cluster {cluster_id}: {data['count']} images\n\n"
+
+        # Add noise samples if available
+        if result["noise_samples"]:
+            md_output += "#### Noise Samples\n\n"
+            for i, prompt in enumerate(result["noise_samples"]):
+                md_output += f"{i+1}. {prompt}\n\n"
+
+        return md_output, result['stats'], result['clusters']
+    except Exception as e:
+        return f"### Error\n\n{str(e)}", {"error": str(e)}, None
+
+def analyze_tags_fn(analyzer, top_n, include_noise, cluster_pairs, sample_size):
+    if not analyzer:
+        return "### Error\n\nPlease load data first.", None, None
+
+    try:
+        result = analyzer.analyze_tags(
+            top_n=top_n,
+            include_noise=include_noise,
+            cluster_pairs=cluster_pairs,
+            sample_size=sample_size
+        )
+
+        # Format output for Markdown
+        md_output = "### Tag Analysis\n\n"
+
+        # Overall tags
+        md_output += "#### Overall Top Tags\n\n"
+        for tag, count in result['overall_tags'].items():
+            md_output += f"{tag}: {count}\n\n"
+
+        # Per-cluster tags (summary)
+        md_output += "#### Cluster Tag Summary\n\n"
+        for cluster_id, tags in sorted(result['cluster_tags'].items(), key=lambda x: int(x[0])):
+            md_output += f"Cluster {cluster_id}: "
+            md_output += ", ".join([f"{tag} ({count})" for tag, count in tags.items()])
+            md_output += "\n\n"
+
+        # Pair differences (summary)
+        if result['pair_differences']:
+            md_output += "#### Cluster Pair Differences\n\n"
+            for pair_key, pair_data in result['pair_differences'].items():
+                cluster_a, cluster_b = pair_data['clusters']
+                md_output += f"Clusters {cluster_a} vs {cluster_b}: "
+                md_output += ", ".join([f"{tag} ({count})" for tag, count in pair_data['differences'].items()])
+                md_output += "\n\n"
+
+        return md_output, result['overall_tags'], result['cluster_tags']
+    except Exception as e:
+        return f"### Error\n\n{str(e)}", None, None
+
+def analyze_modifiers_fn(analyzer, top_n, sample_size, max_clusters, show_examples, max_examples):
+    if not analyzer:
+        return "### Error\n\nPlease load data first.", None
+
+    try:
+        result = analyzer.analyze_modifiers(
+            top_n=top_n,
+            sample_size=sample_size,
+            max_clusters=max_clusters if max_clusters else None,
+            show_examples=show_examples,
+            max_examples=max_examples
+        )
+
+        # Format output for Markdown
+        md_output = "### Modifier Analysis\n\n"
+
+        # List modifiers
+        md_output += "#### Top Modifiers\n\n"
+        for modifier, data in result['modifiers'].items():
+            md_output += f"**{modifier}**: {data['count']} occurrences\n\n"
+
+            if show_examples and "examples" in data:
+                md_output += "Examples:\n\n"
+                for i, example in enumerate(data["examples"]):
+                    # Truncate examples to keep output manageable
+                    if len(example) > 100:
+                        example = example[:100] + "..."
+                    md_output += f"- {example}\n\n"
+
+        return md_output, result
+    except Exception as e:
+        return f"### Error\n\n{str(e)}", None
+
+
+
 
 def generate_visualization(sample_size=100, directory=None, with_diffs=False, progress=gr.Progress()):
     """Generate cluster visualization for Gradio UI"""
@@ -489,78 +682,12 @@ def create_tag_analysis_tab() -> Dict[str, Any]:
         outputs=[analyzer_state, load_status]
     )
 
-    def generate_summary(analyzer, sample_size, screen_dirs_str, show_paths):
-        if not analyzer:
-            return "### Error\n\nPlease load data first.", {"error": "No data loaded"}
-
-        # Process screen directories
-        screen_dirs = None
-        if screen_dirs_str:
-            screen_dirs = [d.strip() for d in screen_dirs_str.split(',') if d.strip()]
-
-        try:
-            result = analyzer.get_cluster_summary(
-                sample_size=sample_size,
-                screen_dirs=screen_dirs,
-                show_paths=show_paths
-            )
-
-            # Format output for Markdown
-            md_output = "### Cluster Summary\n\n"
-            for summary in result['summaries']:
-                md_output += f"#### Cluster {summary['cluster_id']} - {summary['size']} prompts\n\n"
-                md_output += f"Common tokens: {', '.join(summary['common_tokens'])}\n\n"
-                md_output += f"Representative prompt: {summary['representative']}\n\n"
-                if show_paths and 'image_path' in summary and summary['image_path']:
-                    md_output += f"Representative image: {summary['image_path']}\n\n"
-                md_output += "---\n\n"
-
-            return md_output, result['stats']
-        except Exception as e:
-            return f"### Error\n\n{str(e)}", {"error": str(e)}
-
     summary_btn.click(
         fn=generate_summary,
         inputs=[analyzer_state, summary_sample_size, screen_dirs, show_paths],
         outputs=[summary_output, summary_stats]
     )
 
-    def analyze_directory_fn(analyzer, directory, sample_size, noise_sample):
-        if not analyzer:
-            return "### Error\n\nPlease load data first.", {"error": "No data loaded"}, None
-
-        try:
-            result = analyzer.analyze_directory(
-                directory=directory,
-                sample_size=sample_size,
-                noise_sample=noise_sample
-            )
-
-            # Format output for Markdown
-            md_output = f"### Directory Analysis: {result['directory']}\n\n"
-            md_output += f"Total images: {result['stats']['total_images']}\n\n"
-            md_output += f"Clustered images: {result['stats']['clustered_images']}\n\n"
-            md_output += f"Noise images: {result['stats']['noise_images']}\n\n"
-            md_output += f"Contributing to {result['stats']['cluster_count']} clusters\n\n"
-
-            # Add cluster distribution
-            md_output += "#### Cluster Distribution\n\n"
-            for cluster_id, data in sorted(
-                [(int(k), v) for k, v in result['clusters'].items()],
-                key=lambda x: x[1]['count'],
-                reverse=True
-            ):
-                md_output += f"Cluster {cluster_id}: {data['count']} images\n\n"
-
-            # Add noise samples if available
-            if result["noise_samples"]:
-                md_output += "#### Noise Samples\n\n"
-                for i, prompt in enumerate(result["noise_samples"]):
-                    md_output += f"{i+1}. {prompt}\n\n"
-
-            return md_output, result['stats'], result['clusters']
-        except Exception as e:
-            return f"### Error\n\n{str(e)}", {"error": str(e)}, None
 
     dir_btn.click(
         fn=analyze_directory_fn,
@@ -568,84 +695,11 @@ def create_tag_analysis_tab() -> Dict[str, Any]:
         outputs=[dir_output, dir_stats, dir_cluster_data]
     )
 
-    def analyze_tags_fn(analyzer, top_n, include_noise, cluster_pairs, sample_size):
-        if not analyzer:
-            return "### Error\n\nPlease load data first.", None, None
-
-        try:
-            result = analyzer.analyze_tags(
-                top_n=top_n,
-                include_noise=include_noise,
-                cluster_pairs=cluster_pairs,
-                sample_size=sample_size
-            )
-
-            # Format output for Markdown
-            md_output = "### Tag Analysis\n\n"
-
-            # Overall tags
-            md_output += "#### Overall Top Tags\n\n"
-            for tag, count in result['overall_tags'].items():
-                md_output += f"{tag}: {count}\n\n"
-
-            # Per-cluster tags (summary)
-            md_output += "#### Cluster Tag Summary\n\n"
-            for cluster_id, tags in sorted(result['cluster_tags'].items(), key=lambda x: int(x[0])):
-                md_output += f"Cluster {cluster_id}: "
-                md_output += ", ".join([f"{tag} ({count})" for tag, count in tags.items()])
-                md_output += "\n\n"
-
-            # Pair differences (summary)
-            if result['pair_differences']:
-                md_output += "#### Cluster Pair Differences\n\n"
-                for pair_key, pair_data in result['pair_differences'].items():
-                    cluster_a, cluster_b = pair_data['clusters']
-                    md_output += f"Clusters {cluster_a} vs {cluster_b}: "
-                    md_output += ", ".join([f"{tag} ({count})" for tag, count in pair_data['differences'].items()])
-                    md_output += "\n\n"
-
-            return md_output, result['overall_tags'], result['cluster_tags']
-        except Exception as e:
-            return f"### Error\n\n{str(e)}", None, None
-
     tag_btn.click(
         fn=analyze_tags_fn,
         inputs=[analyzer_state, tag_top_n, include_noise, cluster_pairs, tag_sample_size],
         outputs=[tag_output, overall_tags, cluster_tags]
     )
-
-    def analyze_modifiers_fn(analyzer, top_n, sample_size, max_clusters, show_examples, max_examples):
-        if not analyzer:
-            return "### Error\n\nPlease load data first.", None
-
-        try:
-            result = analyzer.analyze_modifiers(
-                top_n=top_n,
-                sample_size=sample_size,
-                max_clusters=max_clusters if max_clusters else None,
-                show_examples=show_examples,
-                max_examples=max_examples
-            )
-
-            # Format output for Markdown
-            md_output = "### Modifier Analysis\n\n"
-
-            # List modifiers
-            md_output += "#### Top Modifiers\n\n"
-            for modifier, data in result['modifiers'].items():
-                md_output += f"**{modifier}**: {data['count']} occurrences\n\n"
-
-                if show_examples and "examples" in data:
-                    md_output += "Examples:\n\n"
-                    for i, example in enumerate(data["examples"]):
-                        # Truncate examples to keep output manageable
-                        if len(example) > 100:
-                            example = example[:100] + "..."
-                        md_output += f"- {example}\n\n"
-
-            return md_output, result
-        except Exception as e:
-            return f"### Error\n\n{str(e)}", None
 
     mod_btn.click(
         fn=analyze_modifiers_fn,
@@ -653,55 +707,6 @@ def create_tag_analysis_tab() -> Dict[str, Any]:
                 show_examples, max_examples],
         outputs=[mod_output, mod_data]
     )
-
-    def generate_visualization_fn(analyzer, sample_size, directory, with_diffs):
-        if not analyzer:
-            return None, "### Error\n\nPlease load data first.", None, None
-
-        try:
-            result = analyzer.generate_visualization(
-                sample_size=sample_size,
-                directory=directory if directory else None,
-                with_diffs=with_diffs
-            )
-
-            if "error" in result:
-                return None, f"### Error\n\n{result['error']}", None, None
-
-            # Generate matplotlib plot
-            fig = plt.figure(figsize=(10, 8))
-
-            # Get data from points
-            x = [p["x"] for p in result["points"]]
-            y = [p["y"] for p in result["points"]]
-            clusters = [p["cluster"] for p in result["points"]]
-
-            # Plot points
-            scatter = plt.scatter(x, y, c=clusters, cmap='tab20', alpha=0.6, s=10)
-            plt.colorbar(scatter, label="Cluster")
-            plt.title('Prompt Clusters')
-            plt.xlabel('UMAP Dimension 1')
-            plt.ylabel('UMAP Dimension 2')
-
-            # Get cluster samples for display
-            cluster_samples_dict = {}
-            for cluster_id, data in result["cluster_samples"].items():
-                cluster_samples_dict[cluster_id] = {
-                    "size": data["size"],
-                    "common_tokens": data["common_tokens"],
-                    "samples": data["samples"][:5]  # Only include first 5 samples
-                }
-
-            # Create stats object
-            vis_stats_dict = {
-                "total_clusters": result["total_clusters"],
-                "total_points": result["total_points"],
-                "noise_points": result["noise_points"]
-            }
-
-            return fig, None, cluster_samples_dict, vis_stats_dict
-        except Exception as e:
-            return None, f"### Error\n\n{str(e)}", None, None
 
     vis_btn.click(
         fn=generate_visualization_fn,

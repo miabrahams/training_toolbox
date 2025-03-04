@@ -80,7 +80,7 @@ def update_current_dir(selected_dir, current):
         videos = list_videos(current)
         return current, gr.update(choices=list_directories(current), value=current), gr.update(choices=videos, value=[])
 
-    # Join paths properly - selected_dir could be relative or absolute
+    # Selected_dir could be relative or absolute
     if os.path.isabs(selected_dir):
         new_path = selected_dir
     else:
@@ -90,12 +90,14 @@ def update_current_dir(selected_dir, current):
     # Return updated current directory, list of subdirectories, and list of videos
     return new_path, gr.update(choices=list_directories(new_path), value=new_path), gr.update(choices=videos, value=[])
 
-def select_all_videos(videos, current_selection):
+def select_all_videos(current_dir, current_selection):
     """Select all videos or none if all are already selected"""
-    if len(current_selection) == len(videos):
-        return []  # Deselect all if all are selected
+    all_videos = list_videos(current_dir)
+
+    if len(current_selection) == len(all_videos):
+        return []  # Deselect
     else:
-        return videos  # Select all
+        return all_videos  # Select all
 
 def create_frame_extractor_tab():
     """Create the frame extractor tab for the Gradio UI"""
@@ -117,9 +119,11 @@ def create_frame_extractor_tab():
                 with gr.Row():
                     refresh_btn = gr.Button("Refresh")
 
-                with gr.Row():
-                    video_selector = gr.CheckboxGroup(choices=[], label="Select Videos")
-                    select_all_btn = gr.Button("Select All/None", size='sm')
+                with gr.Column():
+                    with gr.Row():
+                        video_selector = gr.CheckboxGroup(choices=[], label="Select Videos")
+                    with gr.Row():
+                        select_all_btn = gr.Button("Select All/None", size='sm')
 
                 output_dir = gr.Textbox(label="Output Directory (leave empty for default)")
                 num_frames = gr.Slider(minimum=1, maximum=30, value=5, step=1, label="Number of frames to extract")
@@ -133,21 +137,21 @@ def create_frame_extractor_tab():
         up_button.click(
             navigate_to_parent,
             [current_dir],
-            [current_dir, dir_dropdown, video_selector]  # Update video selector too
+            [current_dir, dir_dropdown, video_selector]
         )
 
         # Event for when current_dir is manually changed
         current_dir.submit(
             handle_path_input,
             [current_dir],
-            [current_dir, dir_dropdown, video_selector]  # Update video selector too
+            [current_dir, dir_dropdown, video_selector]
         )
 
         # Change refreshes both directory and video lists
         dir_dropdown.change(
             update_current_dir,
             [dir_dropdown, current_dir],
-            [current_dir, dir_dropdown, video_selector]  # Update dir_dropdown too
+            [current_dir, dir_dropdown, video_selector]
         )
 
         # refresh updates subdirectory list
@@ -160,11 +164,11 @@ def create_frame_extractor_tab():
         # Select all videos button
         select_all_btn.click(
             select_all_videos,
-            [video_selector],
-            [video_selector]
+            inputs=[current_dir, video_selector],
+            outputs=video_selector
         )
 
-        # Process videos button with async capability
+        # (async) Process videos
         process_btn.click(
             fn=process_videos,
             inputs=[current_dir, video_selector, output_dir, num_frames],
