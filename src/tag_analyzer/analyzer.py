@@ -354,6 +354,16 @@ class TagAnalyzer:
 
     def _prepare_visualization_data(self, reduced_embeddings, clusters, prompt_texts, sample_size=100, with_diffs=False):
         """Prepare data for visualization"""
+        # Limit the number of points to visualize
+        max_points = min(5000, len(reduced_embeddings))
+
+        if len(reduced_embeddings) > max_points:
+            # Take a random sample of points to avoid overwhelming the UI
+            indices = np.random.choice(len(reduced_embeddings), max_points, replace=False)
+            reduced_embeddings = reduced_embeddings[indices]
+            clusters = clusters[indices]
+            prompt_texts = [prompt_texts[i] for i in indices]
+
         # Convert the embeddings to a list format that can be easily sent to JS
         points = []
         for i in range(len(reduced_embeddings)):
@@ -361,7 +371,8 @@ class TagAnalyzer:
                 "x": float(reduced_embeddings[i, 0]),
                 "y": float(reduced_embeddings[i, 1]),
                 "cluster": int(clusters[i]),
-                "prompt": prompt_texts[i] if i < len(prompt_texts) else ""
+                # Don't include full prompt text to reduce data size
+                # "prompt": prompt_texts[i] if i < len(prompt_texts) else ""
             })
 
         # Get cluster samples
@@ -375,29 +386,32 @@ class TagAnalyzer:
             # Get indices for this cluster
             cluster_indices = np.where(clusters == cluster_id)[0]
 
+            # Limit samples for large clusters
+            sample_size_for_cluster = min(sample_size, len(cluster_indices), 20)  # Hard cap at 20 samples
+
             # Sample prompts
             sample_indices = random.sample(
                 list(cluster_indices),
-                min(sample_size, len(cluster_indices))
+                sample_size_for_cluster
             )
 
             sample_prompts = [prompt_texts[i] for i in sample_indices]
 
-            # Get common tokens
-            common = common_tokens(sample_prompts)
+            # Get common tokens - limit to 10 maximum
+            common = common_tokens(sample_prompts)[:10]
 
-            # Store samples
+            # Store samples - limit to 5 samples maximum
             cluster_samples[str(cluster_id)] = {
                 "size": len(cluster_indices),
-                "common_tokens": common[:10] if len(common) > 10 else common,
+                "common_tokens": common,
                 "samples": sample_prompts[:5]  # Limit to 5 samples
             }
 
-            # Add diff analysis if requested
+            # Add diff analysis if requested - limit to 3 maximum
             if with_diffs and sample_prompts:
                 diffs = []
                 baseline = sample_prompts[0]
-                for i, prompt in enumerate(sample_prompts[1:5]):  # Limit to 4 diffs
+                for i, prompt in enumerate(sample_prompts[1:3]):  # Limit to 2 diffs only
                     diff = prompt_diffs(prompt, baseline)
                     diffs.append({
                         "prompt_index": i + 1,
