@@ -1,4 +1,4 @@
-import os
+
 import numpy as np
 import random
 from collections import Counter, defaultdict
@@ -126,12 +126,12 @@ class TagAnalyzer:
 
                 # Add to results if under limit
                 if len(results) < limit:
-                    image_path = self.image_paths.get(prompt, None)
+                    image_path = self.prompt_data.image_paths.get(prompt, None)
 
-                    # Get cluster information if available
+                    # Get cluster information if available - only if analysis is loaded
                     cluster_id = None
-                    if self.analysis and idx < len(self.clusters):
-                        cluster_id = int(self.clusters[idx])
+                    if self.analysis and idx < len(self.analysis.clusters):
+                        cluster_id = int(self.analysis.clusters[idx])
 
                     results.append({
                         "prompt": prompt,
@@ -764,9 +764,23 @@ def create_analyzer(
     prompt_data: PromptData,
     db: TagDatabase,
     data_dir: Path,
+    compute_analysis: bool = False,
     progress: Callable = noCallback,
 ):
-    """Create and initialize a TagAnalyzer instance"""
+    """
+    Create and initialize a TagAnalyzer instance
+
+    Args:
+        prompt_data: PromptData instance with prompt texts and paths
+        db: TagDatabase instance
+        data_dir: Path to directory to store/load analysis data
+        compute_analysis: Whether to compute embeddings and clusters immediately
+        progress: Progress callback function
+
+    Returns:
+        Initialized TagAnalyzer instance
+    """
+    # Try to load existing analysis data
     analysis_data = TagAnalysisData.load_analysis_data(data_dir)
 
     analyzer = TagAnalyzer(
@@ -777,7 +791,8 @@ def create_analyzer(
         db=db
     )
 
-    if not analysis_data:
+    # Only compute analysis data if requested and not already loaded
+    if compute_analysis and not analysis_data:
         analyzer._compute_analysis_data(progress)
 
     return analyzer

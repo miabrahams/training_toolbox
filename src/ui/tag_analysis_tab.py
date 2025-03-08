@@ -438,6 +438,25 @@ def analyze_modifiers_fn(analyzer_instance, top_n, sample_size, max_clusters, sh
     except Exception as e:
         return f"### Error\n\n{str(e)}", None
 
+def compute_analysis(progress=gr.Progress()):
+    """Compute embeddings and clusters for the analyzer"""
+    def progress_callback(progress_value, status_text):
+        progress(progress_value, status_text)
+
+    try:
+        # Use the passed-in analyzer to compute analysis data
+        analyzer._compute_analysis_data(progress=progress_callback)
+
+        # Return success message with stats
+        clusters = analyzer.clusters if analyzer.analysis else None
+        if clusters is not None:
+            n_clusters = len(np.unique(clusters)) - (1 if -1 in clusters else 0)
+            return f"Analysis complete: {len(analyzer.prompt_texts)} prompts, {n_clusters} clusters"
+        else:
+            return "Error computing analysis data"
+    except Exception as e:
+        return f"Error: {str(e)}"
+
 def create_tag_analysis_tab(in_analyzer: TagAnalyzer) -> Dict[str, Any]:
     """
     Create the tag analysis tab for the Gradio UI
@@ -458,6 +477,13 @@ def create_tag_analysis_tab(in_analyzer: TagAnalyzer) -> Dict[str, Any]:
         with gr.Row():
             with gr.Column(scale=1):
                 gr.Markdown("## Analysis Settings")
+                # Replace the database path and data directory with just a compute button
+                compute_btn = gr.Button("Compute Analysis", variant="primary")
+
+                analysis_status = gr.Textbox(
+                    label="Analysis Status",
+                    value="Analysis not computed" if analyzer.analysis is None else "Analysis loaded from disk"
+                )
 
                 db_path = gr.Textbox(
                     label="Database Path",
@@ -633,6 +659,13 @@ def create_tag_analysis_tab(in_analyzer: TagAnalyzer) -> Dict[str, Any]:
 
     # Initialize analyzer state (will be set when loading data)
     analyzer_state = gr.State(None)
+
+    # Connect compute button to compute_analysis function
+    compute_btn.click(
+        fn=compute_analysis,
+        inputs=[],
+        outputs=[analysis_status]
+    )
 
     # Define UI logic
     load_btn.click(
