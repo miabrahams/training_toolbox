@@ -2,8 +2,6 @@ import random
 import gradio as gr
 import os
 import numpy as np
-import matplotlib.pyplot as plt
-from io import BytesIO
 from typing import Dict, Any
 
 from src.tag_analyzer import TagAnalyzer, create_analyzer
@@ -11,18 +9,19 @@ from src.tag_analyzer import TagAnalyzer, create_analyzer
 # Global analyzer instance
 analyzer: TagAnalyzer | None = None
 
-def initialize_analyzer(db_path, data_dir, progress=gr.Progress()):
+def initialize_analyzer(db_path, data_dir, force_recompute=False, progress=gr.Progress()):
     """Initialize the analyzer with given paths and display progress"""
     global analyzer
 
-    progress(0.1, "Initializing tag analyzer...")
-    analyzer = create_analyzer(db_path=db_path, data_dir=data_dir)
+    def progress_callback(progress_value, status_text):
+        progress(progress_value, status_text)
+
+    analyzer = TagAnalyzer(db_path=db_path, data_dir=data_dir)
+    analyzer.load_data(force_recompute=force_recompute, progress_callback=progress_callback)
 
     if analyzer is not None and analyzer.clusters is not None:
-        progress(1.0, "Analyzer initialized successfully!")
         return f"Loaded {len(analyzer.prompt_texts)} prompts with {len(np.unique(analyzer.clusters))-1} clusters."
     else:
-        progress(1.0, "Failed to initialize analyzer.")
         return "Error: Failed to initialize the tag analyzer. Check the database path."
 
 def get_cluster_summary(sample_size=5, screen_dirs=None, show_paths=False, progress=gr.Progress()):
@@ -31,11 +30,14 @@ def get_cluster_summary(sample_size=5, screen_dirs=None, show_paths=False, progr
     if analyzer is None:
         return "Error: Analyzer not initialized. Please initialize first."
 
-    progress(0.3, "Analyzing clusters...")
+    def progress_callback(progress_value, status_text):
+        progress(progress_value, status_text)
+
     result = analyzer.get_cluster_summary(
         sample_size=sample_size,
-        screen_dirs=screen_dirs.split(",") if screen_dirs else None,
-        show_paths=show_paths
+        screen_dirs=screen_dirs.split(",") if screen_dirs and screen_dirs.strip() else None,
+        show_paths=show_paths,
+        progress_callback=progress_callback
     )
 
     # Format the results for the UI
@@ -71,7 +73,6 @@ def get_cluster_summary(sample_size=5, screen_dirs=None, show_paths=False, progr
 
         md_output += "\n---\n\n"
 
-    progress(1.0, "Cluster summary generated!")
     return md_output
 
 def analyze_directory(directory, sample_size=5, noise_sample=10, progress=gr.Progress()):
@@ -80,11 +81,14 @@ def analyze_directory(directory, sample_size=5, noise_sample=10, progress=gr.Pro
     if analyzer is None:
         return "Error: Analyzer not initialized. Please initialize first."
 
-    progress(0.3, f"Analyzing directory: {directory}...")
+    def progress_callback(progress_value, status_text):
+        progress(progress_value, status_text)
+
     result = analyzer.analyze_directory(
         directory=directory,
         sample_size=sample_size,
-        noise_sample=noise_sample
+        noise_sample=noise_sample,
+        progress_callback=progress_callback
     )
 
     # Format the results for the UI
@@ -127,7 +131,6 @@ def analyze_directory(directory, sample_size=5, noise_sample=10, progress=gr.Pro
         for i, prompt in enumerate(result["noise_samples"]):
             md_output += f"{i+1}. {prompt}\n"
 
-    progress(1.0, "Directory analysis complete!")
     return md_output
 
 def analyze_tags(top_n=20, include_noise=False, cluster_pairs=5, sample_size=10, progress=gr.Progress()):
@@ -136,12 +139,15 @@ def analyze_tags(top_n=20, include_noise=False, cluster_pairs=5, sample_size=10,
     if analyzer is None:
         return "Error: Analyzer not initialized. Please initialize first."
 
-    progress(0.3, "Analyzing tag distribution...")
+    def progress_callback(progress_value, status_text):
+        progress(progress_value, status_text)
+
     result = analyzer.analyze_tags(
         top_n=top_n,
         include_noise=include_noise,
         cluster_pairs=cluster_pairs,
-        sample_size=sample_size
+        sample_size=sample_size,
+        progress_callback=progress_callback
     )
 
     # Format the results for the UI
@@ -174,7 +180,6 @@ def analyze_tags(top_n=20, include_noise=False, cluster_pairs=5, sample_size=10,
                 md_output += f"- {tag}: {count}\n"
             md_output += "\n"
 
-    progress(1.0, "Tag analysis complete!")
     return md_output
 
 def analyze_modifiers(top_n=50, sample_size=20, max_clusters=None,
@@ -187,13 +192,16 @@ def analyze_modifiers(top_n=50, sample_size=20, max_clusters=None,
     if max_clusters is not None and max_clusters <= 0:
         max_clusters = None
 
-    progress(0.3, "Analyzing tag modifiers...")
+    def progress_callback(progress_value, status_text):
+        progress(progress_value, status_text)
+
     result = analyzer.analyze_modifiers(
         top_n=top_n,
         sample_size=sample_size,
         max_clusters=max_clusters,
         show_examples=show_examples,
-        max_examples=max_examples
+        max_examples=max_examples,
+        progress_callback=progress_callback
     )
 
     # Format the results for the UI
@@ -217,15 +225,35 @@ def analyze_modifiers(top_n=50, sample_size=20, max_clusters=None,
                 md_output += f"{i+1}. {example}\n"
             md_output += "\n"
 
-    progress(1.0, "Modifier analysis complete!")
     return md_output
 
-def generate_visualization_fn(analyzer, sample_size, directory, with_diffs):
-    if not analyzer:
+def generate_visualization(sample_size=100, directory=None, with_diffs=False, progress=gr.Progress()):
+    """Generate cluster visualization for Gradio UI"""
+    global analyzer
+    if analyzer is None:
+        return None, "Error: Analyzer not initialized. Please initialize first."
+
+    def progress_callback(progress_value, status_text):
+        progress(progress_value, status_text)
+
+    # Use the analyzer's generate_plot method which returns the plot image and text
+    plot_img, text_output = analyzer.generate_plot(
+        sample_size=sample_size,
+        directory=directory if directory and directory.strip() else None,
+        with_diffs=with_diffs,
+        progress_callback=progress_callback
+    )
+
+    return plot_img, text_output
+
+# Functions for the more detailed UI components
+def generate_visualization_fn(analyzer_instance, sample_size, directory, with_diffs):
+    """Generate visualization with more detailed return data for UI"""
+    if not analyzer_instance:
         return None, "### Error\n\nPlease load data first.", None, None
 
     try:
-        result = analyzer.generate_visualization(
+        result = analyzer_instance.generate_visualization(
             sample_size=sample_size,
             directory=directory if directory else None,
             with_diffs=with_diffs
@@ -234,7 +262,8 @@ def generate_visualization_fn(analyzer, sample_size, directory, with_diffs):
         if "error" in result:
             return None, f"### Error\n\n{result['error']}", None, None
 
-        # Generate matplotlib plot
+        # Create matplotlib figure from the result data
+        import matplotlib.pyplot as plt
         fig = plt.figure(figsize=(10, 8))
 
         # Get data from points
@@ -269,8 +298,9 @@ def generate_visualization_fn(analyzer, sample_size, directory, with_diffs):
     except Exception as e:
         return None, f"### Error\n\n{str(e)}", None, None
 
-def generate_summary(analyzer, sample_size, screen_dirs_str, show_paths):
-    if not analyzer:
+def generate_summary(analyzer_instance, sample_size, screen_dirs_str, show_paths):
+    """Generate summary with more detailed return data for UI"""
+    if not analyzer_instance:
         return "### Error\n\nPlease load data first.", {"error": "No data loaded"}
 
     # Process screen directories
@@ -279,7 +309,7 @@ def generate_summary(analyzer, sample_size, screen_dirs_str, show_paths):
         screen_dirs = [d.strip() for d in screen_dirs_str.split(',') if d.strip()]
 
     try:
-        result = analyzer.get_cluster_summary(
+        result = analyzer_instance.get_cluster_summary(
             sample_size=sample_size,
             screen_dirs=screen_dirs,
             show_paths=show_paths
@@ -299,12 +329,13 @@ def generate_summary(analyzer, sample_size, screen_dirs_str, show_paths):
     except Exception as e:
         return f"### Error\n\n{str(e)}", {"error": str(e)}
 
-def analyze_directory_fn(analyzer, directory, sample_size, noise_sample):
-    if not analyzer:
+def analyze_directory_fn(analyzer_instance, directory, sample_size, noise_sample):
+    """Analyze directory with more detailed return data for UI"""
+    if not analyzer_instance:
         return "### Error\n\nPlease load data first.", {"error": "No data loaded"}, None
 
     try:
-        result = analyzer.analyze_directory(
+        result = analyzer_instance.analyze_directory(
             directory=directory,
             sample_size=sample_size,
             noise_sample=noise_sample
@@ -336,12 +367,13 @@ def analyze_directory_fn(analyzer, directory, sample_size, noise_sample):
     except Exception as e:
         return f"### Error\n\n{str(e)}", {"error": str(e)}, None
 
-def analyze_tags_fn(analyzer, top_n, include_noise, cluster_pairs, sample_size):
-    if not analyzer:
+def analyze_tags_fn(analyzer_instance, top_n, include_noise, cluster_pairs, sample_size):
+    """Analyze tags with more detailed return data for UI"""
+    if not analyzer_instance:
         return "### Error\n\nPlease load data first.", None, None
 
     try:
-        result = analyzer.analyze_tags(
+        result = analyzer_instance.analyze_tags(
             top_n=top_n,
             include_noise=include_noise,
             cluster_pairs=cluster_pairs,
@@ -376,12 +408,13 @@ def analyze_tags_fn(analyzer, top_n, include_noise, cluster_pairs, sample_size):
     except Exception as e:
         return f"### Error\n\n{str(e)}", None, None
 
-def analyze_modifiers_fn(analyzer, top_n, sample_size, max_clusters, show_examples, max_examples):
-    if not analyzer:
+def analyze_modifiers_fn(analyzer_instance, top_n, sample_size, max_clusters, show_examples, max_examples):
+    """Analyze modifiers with more detailed return data for UI"""
+    if not analyzer_instance:
         return "### Error\n\nPlease load data first.", None
 
     try:
-        result = analyzer.analyze_modifiers(
+        result = analyzer_instance.analyze_modifiers(
             top_n=top_n,
             sample_size=sample_size,
             max_clusters=max_clusters if max_clusters else None,
@@ -408,78 +441,6 @@ def analyze_modifiers_fn(analyzer, top_n, sample_size, max_clusters, show_exampl
         return md_output, result
     except Exception as e:
         return f"### Error\n\n{str(e)}", None
-
-
-
-
-def generate_visualization(sample_size=100, directory=None, with_diffs=False, progress=gr.Progress()):
-    """Generate cluster visualization for Gradio UI"""
-    global analyzer
-    if analyzer is None:
-        return None, "Error: Analyzer not initialized. Please initialize first."
-
-    progress(0.3, "Generating visualization...")
-    result = analyzer.generate_visualization(
-        sample_size=sample_size,
-        directory=directory if directory and directory.strip() else None,
-        with_diffs=with_diffs
-    )
-
-    # Format the results for the UI
-    if "error" in result:
-        return None, result["error"]
-
-    # Generate the plot
-    fig, ax = plt.subplots(figsize=(10, 8))
-
-    # Extract points
-    x = [p["x"] for p in result["points"]]
-    y = [p["y"] for p in result["points"]]
-    clusters = [p["cluster"] for p in result["points"]]
-
-    # Create scatter plot
-    scatter = ax.scatter(x, y, c=clusters, cmap='tab20', alpha=0.6, s=30)
-    plt.colorbar(scatter, ax=ax, label="Cluster ID")
-
-    title = "Prompt Clusters"
-    if directory:
-        title += f" for {os.path.basename(directory)}"
-    ax.set_title(title)
-
-    # Save the plot to a BytesIO object
-    buf = BytesIO()
-    plt.savefig(buf, format='png', dpi=150, bbox_inches='tight')
-    plt.close(fig)
-    buf.seek(0)
-    plot_img = buf.getvalue()
-
-    # Generate text output
-    text_output = f"# Cluster Visualization\n\n"
-    text_output += f"- Total clusters: {result['total_clusters']}\n"
-    text_output += f"- Total points: {result['total_points']}\n"
-    text_output += f"- Noise points: {result['noise_points']}\n\n"
-
-    # Add sample data for each cluster
-    text_output += "## Cluster Samples\n\n"
-
-    for cluster_id, data in sorted(result["cluster_samples"].items(), key=lambda x: int(x[0])):
-        text_output += f"### Cluster {cluster_id} ({data['size']} prompts)\n\n"
-        text_output += f"**Common tokens:** {', '.join(data['common_tokens'])}\n\n"
-        text_output += "**Sample prompts:**\n\n"
-
-        for i, prompt in enumerate(data["samples"]):
-            text_output += f"{i+1}. {prompt}\n"
-
-        # If diff analysis is included
-        if "diffs" in data:
-            text_output += "\n**Diff Analysis:**\n\n"
-            for diff in data["diffs"]:
-                text_output += f"Prompt {diff['prompt_index']} diff: {diff['diff']}\n"
-
-        text_output += "\n---\n\n"
-
-    progress(1.0, "Visualization complete!")
-    return plot_img, text_output
 
 def create_tag_analysis_tab() -> Dict[str, Any]:
     """
@@ -669,48 +630,71 @@ def create_tag_analysis_tab() -> Dict[str, Any]:
     analyzer_state = gr.State(None)
 
     # Define UI logic
-    def load_analyzer(db_path, data_dir, force_recompute):
-        try:
-            analyzer = create_analyzer(db_path, data_dir, force_recompute)
-            return analyzer, f"Data loaded successfully with {len(analyzer.prompt_texts)} prompts"
-        except Exception as e:
-            return None, f"Error loading data: {str(e)}"
-
     load_btn.click(
-        fn=load_analyzer,
+        fn=initialize_analyzer,
         inputs=[db_path, data_dir, force_recompute],
-        outputs=[analyzer_state, load_status]
+        outputs=[load_status]
     )
 
+    # Connect UI to analyzer methods
     summary_btn.click(
-        fn=generate_summary,
-        inputs=[analyzer_state, summary_sample_size, screen_dirs, show_paths],
+        fn=get_cluster_summary,
+        inputs=[summary_sample_size, screen_dirs, show_paths],
+        outputs=[summary_output]
+    )
+
+    dir_btn.click(
+        fn=analyze_directory,
+        inputs=[dir_path, dir_sample_size, noise_sample],
+        outputs=[dir_output]
+    )
+
+    tag_btn.click(
+        fn=analyze_tags,
+        inputs=[tag_top_n, include_noise, cluster_pairs, tag_sample_size],
+        outputs=[tag_output]
+    )
+
+    mod_btn.click(
+        fn=analyze_modifiers,
+        inputs=[mod_top_n, mod_sample_size, max_clusters, show_examples, max_examples],
+        outputs=[mod_output]
+    )
+
+    vis_btn.click(
+        fn=generate_visualization,
+        inputs=[vis_sample_size, vis_directory, with_diffs],
+        outputs=[plot_output, vis_stats]
+    )
+
+    # Connect detailed UI components
+    summary_btn.click(
+        fn=lambda: generate_summary(analyzer, summary_sample_size.value, screen_dirs.value, show_paths.value),
+        inputs=[],
         outputs=[summary_output, summary_stats]
     )
 
-
     dir_btn.click(
-        fn=analyze_directory_fn,
-        inputs=[analyzer_state, dir_path, dir_sample_size, noise_sample],
+        fn=lambda: analyze_directory_fn(analyzer, dir_path.value, dir_sample_size.value, noise_sample.value),
+        inputs=[],
         outputs=[dir_output, dir_stats, dir_cluster_data]
     )
 
     tag_btn.click(
-        fn=analyze_tags_fn,
-        inputs=[analyzer_state, tag_top_n, include_noise, cluster_pairs, tag_sample_size],
+        fn=lambda: analyze_tags_fn(analyzer, tag_top_n.value, include_noise.value, cluster_pairs.value, tag_sample_size.value),
+        inputs=[],
         outputs=[tag_output, overall_tags, cluster_tags]
     )
 
     mod_btn.click(
-        fn=analyze_modifiers_fn,
-        inputs=[analyzer_state, mod_top_n, mod_sample_size, max_clusters,
-                show_examples, max_examples],
+        fn=lambda: analyze_modifiers_fn(analyzer, mod_top_n.value, mod_sample_size.value, max_clusters.value, show_examples.value, max_examples.value),
+        inputs=[],
         outputs=[mod_output, mod_data]
     )
 
     vis_btn.click(
-        fn=generate_visualization_fn,
-        inputs=[analyzer_state, vis_sample_size, vis_directory, with_diffs],
+        fn=lambda: generate_visualization_fn(analyzer, vis_sample_size.value, vis_directory.value, with_diffs.value),
+        inputs=[],
         outputs=[plot_output, vis_stats, cluster_samples, vis_stats]
     )
 

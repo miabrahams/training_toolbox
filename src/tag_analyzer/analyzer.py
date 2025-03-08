@@ -5,22 +5,27 @@ import sqlite3
 import json
 import random
 from collections import Counter, defaultdict
-from typing import List, Dict, Tuple, Set, Optional, Any
+from typing import List, Dict, Tuple, Set, Optional, Any, Union, Callable
 import matplotlib.pyplot as plt
 from pathlib import Path
 import re
 import itertools
+from io import BytesIO
 
 from sentence_transformers import SentenceTransformer
 from sklearn.preprocessing import normalize
 import umap
 import hdbscan
 
+from .database import TagDatabase
 from .utils import (
     extract_positive_prompt, clean_prompt,
     extract_tags_from_prompts, common_tokens,
     prompt_diffs, extract_normalized_diffs
 )
+
+def noCallback(*args, **kwargs):
+    pass
 
 class TagAnalyzer:
     def __init__(self, db_path="data/prompts.sqlite", data_dir="data"):
@@ -34,9 +39,12 @@ class TagAnalyzer:
         self.image_paths = None
         self.db_path = db_path
         self.data_dir = data_dir
+        self.db = TagDatabase(db_path)
 
-    def load_data(self, force_recompute=False):
-        """Load or compute analysis data"""
+    def load_data(self, force_recompute=False, progress_callback: Callable = noCallback):
+        """Load or compute analysis data with optional progress updates"""
+        progress_callback(0.1, "Starting data loading process...")
+
         if not force_recompute:
             # Try to load existing analysis data first
             analysis_data = self._load_analysis_data()
@@ -44,14 +52,31 @@ class TagAnalyzer:
                 self.embeddings, self.reduced_embeddings, self.clusters, self.prompt_texts = analysis_data
                 # Create prompts Counter from loaded prompt_texts
                 self.prompts = Counter(self.prompt_texts)
-                print(f"Loaded existing analysis data with {len(self.prompt_texts)} prompts")
+
+                if progress_callback:
+                    progress_callback(0.5, f"Loaded existing analysis data with {len(self.prompt_texts)} prompts")
+                else:
+                    print(f"Loaded existing analysis data with {len(self.prompt_texts)} prompts")
 
                 # Load image paths from database
+                if progress_callback:
+                    progress_callback(0.7, "Loading image paths...")
+
                 self._load_image_paths()
+
+                if progress_callback:
+                    progress_callback(1.0, "Data loading complete!")
+
                 return True
 
         # If no existing data or force recompute, process from scratch
-        return self._compute_analysis_data()
+        progress_callback(0.2, "Computing analysis data from scratch...")
+
+        result = self._compute_analysis_data(progress_callback)
+
+        progress_callback(1.0, "Data processing complete!")
+
+        return result
 
     def _load_analysis_data(self):
         """Load embeddings, reduced embeddings, and clusters from disk if available."""
@@ -91,67 +116,46 @@ class TagAnalyzer:
 
     def _load_image_paths(self):
         """Extract mapping of prompt to file path from database."""
-        conn = sqlite3.connect(self.db_path)
-        self.image_paths = {}
-        for row in conn.execute('SELECT file_path, prompt FROM prompts'):
-            try:
-                prompt = json.loads(row[1])
-                filename = row[0]
-                positive = extract_positive_prompt(prompt)
-                self.image_paths[clean_prompt(positive)] = filename
-            except Exception:
-                pass
-        conn.close()
+        self.image_paths = self.db.get_image_paths(self.prompt_texts)
 
-    def _compute_analysis_data(self):
+    def _compute_analysis_data(self, progress_callback: Optional[Callable] = None):
         """Process data from scratch and generate embeddings and clusters."""
-        conn = sqlite3.connect(self.db_path)
+        if progress_callback:
+            progress_callback(0.2, "Loading prompts from database...")
 
-        bad_images = []
-        positives = []
-
-        print(f"Loading prompts from database: {self.db_path}")
-        for row in conn.execute('SELECT file_path, prompt FROM prompts'):
-            try:
-                prompt = json.loads(row[1])
-                filename = row[0]
-                positive = extract_positive_prompt(prompt)
-                positives.append(positive)
-            except Exception:
-                bad_images.append(filename)
-                pass
-
-        print(f"{len(positives)} / {len(positives) + len(bad_images)}")
-        if bad_images:
-            print(f"Bad images: {bad_images[:10]}{'...' if len(bad_images) > 10 else ''}")
-
-        self.prompts = Counter([clean_prompt(p) for p in positives])
+        # Use TagDatabase to load prompts
+        self.prompts, self.image_paths = self.db.load_prompts()
         self.prompt_texts = list(self.prompts.keys())
 
         # Run the analysis
-        self.embeddings, self.reduced_embeddings, self.clusters = self._analyze_prompts()
+        if progress_callback:
+            progress_callback(0.3, "Analyzing prompts...")
+
+        self.embeddings, self.reduced_embeddings, self.clusters = self._analyze_prompts(progress_callback)
 
         # Save the analysis data for future use
+        if progress_callback:
+            progress_callback(0.9, "Saving analysis data...")
+
         self._save_analysis_data()
 
-        # Load image paths
-        self._load_image_paths()
-
-        conn.close()
         return True
 
-    def _analyze_prompts(self):
+    def _analyze_prompts(self, progress_callback: Callable = noCallback):
         """Generate embeddings, reduce dimensions, and cluster the prompts."""
         # Generate embeddings
-        print("Generating embeddings...")
+        progress_callback(0.4, "Generating embeddings...")
+
         embeddings = self._generate_embeddings(self.prompt_texts)
 
         # Reduce dimensions for visualization
-        print("Reducing dimensions...")
+        progress_callback(0.6, "Reducing dimensions...")
+
         reduced_embeddings = self._reduce_dimensions(embeddings)
 
         # Cluster the embeddings
-        print("Generating clusters...")
+        progress_callback(0.8, "Generating clusters...")
+
         clusters = self._cluster_embeddings(embeddings)
 
         return embeddings, reduced_embeddings, clusters
@@ -181,10 +185,12 @@ class TagAnalyzer:
         )
         return clusterer.fit_predict(embeddings)
 
-    def get_cluster_summary(self, sample_size=5, screen_dirs=None, show_paths=False):
+    def get_cluster_summary(self, sample_size=5, screen_dirs=None, show_paths=False, progress_callback: Callable = noCallback):
         """Generate cluster summaries"""
         if not self._check_data_loaded():
             return {"error": "Data not loaded. Call load_data() first."}
+
+        progress_callback(0.3, "Generating cluster summaries...")
 
         cluster_summaries = self._make_cluster_summaries(
             self.clusters, self.prompts, sample_size,
@@ -196,6 +202,8 @@ class TagAnalyzer:
         n_clusters = len(np.unique(self.clusters)) - (1 if -1 in self.clusters else 0)
         noise_points = np.sum(self.clusters == -1)
         total_displayed = len(cluster_summaries)
+
+        progress_callback(1.0, "Cluster summary generated!")
 
         return {
             "summaries": cluster_summaries,
@@ -209,10 +217,12 @@ class TagAnalyzer:
             }
         }
 
-    def analyze_directory(self, directory, sample_size=5, noise_sample=10):
+    def analyze_directory(self, directory, sample_size=5, noise_sample=10, progress_callback: Callable = noCallback):
         """Analyze directory contributions to clusters"""
         if not self._check_data_loaded():
             return {"error": "Data not loaded. Call load_data() first."}
+
+        progress_callback(0.3, f"Analyzing directory: {directory}...")
 
         directory_clusters = self._analyze_directory_clusters(
             directory, self.clusters, self.prompt_texts, self.image_paths
@@ -239,6 +249,8 @@ class TagAnalyzer:
                 "samples": prompts[:max_sample]
             }
 
+        progress_callback(1.0, "Directory analysis complete!")
+
         return {
             "directory": directory,
             "stats": {
@@ -251,10 +263,12 @@ class TagAnalyzer:
             "noise_samples": noise_samples
         }
 
-    def analyze_tags(self, top_n=20, include_noise=False, cluster_pairs=5, sample_size=10):
+    def analyze_tags(self, top_n=20, include_noise=False, cluster_pairs=5, sample_size=10, progress_callback: Callable = noCallback):
         """Analyze tag distribution"""
         if not self._check_data_loaded():
             return {"error": "Data not loaded. Call load_data() first."}
+
+        progress_callback(0.3, "Analyzing tag distribution...")
 
         # Get overall tag distribution
         all_tags = extract_tags_from_prompts(self.prompt_texts)
@@ -284,6 +298,8 @@ class TagAnalyzer:
                     "differences": {tag: count for tag, count in diff_tags.most_common(10)}
                 }
 
+        progress_callback(1.0, "Tag analysis complete!")
+
         return {
             "overall_tags": {tag: count for tag, count in most_common},
             "cluster_tags": cluster_tag_data,
@@ -291,14 +307,16 @@ class TagAnalyzer:
         }
 
     def analyze_modifiers(self, top_n=50, sample_size=20, max_clusters=None,
-                          show_examples=False, max_examples=3):
+                          show_examples=False, max_examples=3, progress_callback: Callable = noCallback):
         """Analyze common modifiers across clusters"""
         if not self._check_data_loaded():
             return {"error": "Data not loaded. Call load_data() first."}
 
+        progress_callback(0.3, "Analyzing tag modifiers...")
+
         modifiers = self._get_common_modifiers(
             sample_size=sample_size,
-            max_clusters=max_clusters,
+            max_clusters=max_clusters if max_clusters and max_clusters > 0 else None,
             top_n=top_n
         )
 
@@ -319,12 +337,16 @@ class TagAnalyzer:
                 )
                 result["modifiers"][modifier]["examples"] = examples
 
+        progress_callback(1.0, "Modifier analysis complete!")
+
         return result
 
-    def generate_visualization(self, sample_size=100, directory=None, with_diffs=False):
+    def generate_visualization(self, sample_size=100, directory=None, with_diffs=False, progress_callback: Callable = noCallback):
         """Generate visualization data"""
         if not self._check_data_loaded():
             return {"error": "Data not loaded. Call load_data() first."}
+
+        progress_callback(0.3, "Generating visualization...")
 
         # If directory specified, filter for images in that directory
         if directory:
@@ -341,16 +363,81 @@ class TagAnalyzer:
                 filtered_prompts = [self.prompt_texts[i] for i in dir_prompt_indices]
 
                 # Get cluster samples for visualization
-                return self._prepare_visualization_data(
+                result = self._prepare_visualization_data(
                     filtered_reduced, filtered_clusters, filtered_prompts, sample_size, with_diffs
                 )
             else:
-                return {"error": f"No prompts found in directory: {directory}"}
+                result = {"error": f"No prompts found in directory: {directory}"}
         else:
             # Use all data
-            return self._prepare_visualization_data(
+            result = self._prepare_visualization_data(
                 self.reduced_embeddings, self.clusters, self.prompt_texts, sample_size, with_diffs
             )
+
+        progress_callback(1.0, "Visualization complete!")
+
+        return result
+
+    def generate_plot(self, visualization_data=None, sample_size=100, directory=None, with_diffs=False, progress_callback: Callable = noCallback):
+        """Generate a plot as bytes and text description from visualization data"""
+        if not visualization_data:
+            visualization_data = self.generate_visualization(sample_size, directory, with_diffs, progress_callback)
+
+        if "error" in visualization_data:
+            return None, visualization_data["error"]
+
+        # Generate the plot
+        fig, ax = plt.subplots(figsize=(10, 8))
+
+        # Extract points
+        x = [p["x"] for p in visualization_data["points"]]
+        y = [p["y"] for p in visualization_data["points"]]
+        clusters = [p["cluster"] for p in visualization_data["points"]]
+
+        # Create scatter plot
+        scatter = ax.scatter(x, y, c=clusters, cmap='tab20', alpha=0.6, s=30)
+        plt.colorbar(scatter, ax=ax, label="Cluster ID")
+
+        title = "Prompt Clusters"
+        if directory:
+            title += f" for {os.path.basename(directory)}"
+        ax.set_title(title)
+
+        # Save the plot to a BytesIO object
+        buf = BytesIO()
+        plt.savefig(buf, format='png', dpi=150, bbox_inches='tight')
+        plt.close(fig)
+        buf.seek(0)
+        plot_img = buf.getvalue()
+
+        # Generate text output
+        text_output = f"# Cluster Visualization\n\n"
+        text_output += f"- Total clusters: {visualization_data['total_clusters']}\n"
+        text_output += f"- Total points: {visualization_data['total_points']}\n"
+        text_output += f"- Noise points: {visualization_data['noise_points']}\n\n"
+
+        # Add sample data for each cluster
+        text_output += "## Cluster Samples\n\n"
+
+        for cluster_id, data in sorted(visualization_data["cluster_samples"].items(), key=lambda x: int(x[0])):
+            text_output += f"### Cluster {cluster_id} ({data['size']} prompts})\n\n"
+            text_output += f"**Common tokens:** {', '.join(data['common_tokens'])}\n\n"
+            text_output += "**Sample prompts:**\n\n"
+
+            for i, prompt in enumerate(data["samples"]):
+                text_output += f"{i+1}. {prompt}\n"
+
+            # If diff analysis is included
+            if "diffs" in data:
+                text_output += "\n**Diff Analysis:**\n\n"
+                for diff in data["diffs"]:
+                    text_output += f"Prompt {diff['prompt_index']} diff: {diff['diff']}\n"
+
+            text_output += "\n---\n\n"
+
+        progress_callback(1.0, "Visualization plot generated!")
+
+        return plot_img, text_output
 
     def _prepare_visualization_data(self, reduced_embeddings, clusters, prompt_texts, sample_size=100, with_diffs=False):
         """Prepare data for visualization"""
