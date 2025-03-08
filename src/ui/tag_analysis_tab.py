@@ -152,7 +152,7 @@ def analyze_tags(top_n=20, include_noise=False, cluster_pairs=5, sample_size=10,
         return result["error"]
 
     # Generate detailed markdown output
-    md_output = f"# Tag Distribution Analysis\n\n"
+    md_output = "# Tag Distribution Analysis\n\n"
 
     # Overall tag distribution
     md_output += f"## Top {len(result['overall_tags'])} Tags Overall\n\n"

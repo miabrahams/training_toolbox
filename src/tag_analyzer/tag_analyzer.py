@@ -12,7 +12,7 @@ from sklearn.preprocessing import normalize
 import umap
 import hdbscan
 
-from .analysisdata import AnalysisData
+from .analysisdata import TagAnalysisData
 from .database import TagDatabase
 from .utils import (
     extract_tags_from_prompts, common_tokens,
@@ -29,7 +29,7 @@ class TagAnalyzer:
                  prompt_texts: List[str],
                  prompts: Counter,
                  image_paths: Dict[str, str],
-                 analysis: Optional[AnalysisData],
+                 analysis: Optional[TagAnalysisData],
                  db: TagDatabase):
         self.db_path = db_path
         self.data_dir = data_dir
@@ -70,7 +70,7 @@ class TagAnalyzer:
         embeddings, reduced_embeddings, clusters = self._analyze_prompts(progress)
 
         # Create AnalysisData instance
-        self.analysis = AnalysisData(
+        self.analysis = TagAnalysisData(
             embeddings=embeddings,
             reduced_embeddings=reduced_embeddings,
             clusters=clusters,
@@ -711,7 +711,7 @@ def create_analyzer(
     prompt_texts = list(prompts_counter.keys())
 
     # Try to load existing analysis data
-    analysis_data = AnalysisData.load_analysis_data(data_dir)
+    analysis_data = TagAnalysisData.load_analysis_data(data_dir)
 
     analyzer = TagAnalyzer(
         db_path=db_path,
