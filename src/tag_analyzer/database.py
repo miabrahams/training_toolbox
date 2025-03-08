@@ -20,10 +20,11 @@ class TagDatabase:
 
         conn = sqlite3.connect(self.db_path)
         try:
-            # Create prompt_texts table if it doesn't exist
+            # Create prompt_texts table if it doesn't exist - now with positive_prompt column
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS prompt_texts (
                     file_path TEXT PRIMARY KEY REFERENCES prompts(file_path),
+                    positive_prompt TEXT,
                     cleaned_prompt TEXT,
                     processed BOOLEAN DEFAULT 0,
                     last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -77,19 +78,18 @@ class TagDatabase:
             WHERE pt.file_path IS NULL
         ''')
         new_prompts = cursor.fetchall()
-        print(f"Found {len(new_prompts)} new files to process")
 
-        # Find modified prompts (by comparing last_modified timestamps)
+        # Find unprocessed prompts
         cursor = conn.execute('''
             SELECT p.file_path, p.prompt
             FROM prompts p
-            JOIN prompt_texts pt ON p.file_path = pt.file_path
-            WHERE p.last_modified > pt.last_updated
+            LEFT JOIN prompt_texts pt ON p.file_path = pt.file_path
+            WHERE pt.processed is NULL
         ''')
-        modified_prompts = cursor.fetchall()
-        print(f"Found {len(modified_prompts)} modified prompts to update")
+        new_prompts += cursor.fetchall()
+        print(f"Found {len(new_prompts)} modified prompts to update")
 
-        paths_to_process = new_prompts + modified_prompts
+        paths_to_process = new_prompts
         if not paths_to_process:
             return
 
@@ -120,6 +120,7 @@ class TagDatabase:
                     failed_count += 1
                     continue
 
+                # Generate cleaned prompt from positive prompt
                 cleaned = clean_prompt(positive)
 
                 # Check if this is a new entry or an update
@@ -128,13 +129,17 @@ class TagDatabase:
 
                 if is_update:
                     conn.execute(
-                        'UPDATE prompt_texts SET cleaned_prompt = ?, processed = 1, last_updated = CURRENT_TIMESTAMP WHERE file_path = ?',
-                        (cleaned, file_path)
+                        '''UPDATE prompt_texts
+                           SET positive_prompt = ?, cleaned_prompt = ?, processed = 1, last_updated = CURRENT_TIMESTAMP
+                           WHERE file_path = ?''',
+                        (positive, cleaned, file_path)
                     )
                 else:
                     conn.execute(
-                        'INSERT INTO prompt_texts (file_path, cleaned_prompt, processed) VALUES (?, ?, 1)',
-                        (file_path, cleaned)
+                        '''INSERT INTO prompt_texts
+                           (file_path, positive_prompt, cleaned_prompt, processed)
+                           VALUES (?, ?, ?, 1)''',
+                        (file_path, positive, cleaned)
                     )
 
                 processed_count += 1
@@ -155,6 +160,34 @@ class TagDatabase:
         conn = sqlite3.connect(self.db_path)
         try:
             self._update_prompt_texts_table(conn)
+        finally:
+            conn.close()
+
+    def get_positive_prompts(self, file_paths: List[str]) -> Dict[str, str]:
+        """
+        Get the original positive prompts for given file paths.
+
+        Args:
+            file_paths: List of file paths to retrieve positive prompts for
+
+        Returns:
+            Dictionary mapping file paths to positive prompts
+        """
+        if not file_paths:
+            return {}
+
+        conn = sqlite3.connect(self.db_path)
+        positive_prompts = {}
+
+        try:
+            placeholders = ','.join('?' for _ in file_paths)
+            query = f'SELECT file_path, positive_prompt FROM prompt_texts WHERE file_path IN ({placeholders})'
+
+            cursor = conn.execute(query, file_paths)
+            for row in cursor:
+                positive_prompts[row[0]] = row[1]
+
+            return positive_prompts
         finally:
             conn.close()
 

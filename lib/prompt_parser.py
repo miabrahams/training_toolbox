@@ -121,17 +121,19 @@ def strip_prompt_markup(prompt: str) -> str:
       "(masterpiece, best quality:1.1)" becomes "masterpiece, best quality"
     """
     # Remove LoRA markup (e.g., <lora:...>)
-    prompt = re.sub(r'<lora:[^>]+>', '', prompt)
+    prompt = re.sub(r'<lora:[^>]+>', ' ', prompt)
     # Remove weight values inside parentheses: remove colon and weights
-    prompt = re.sub(r':\s*[0-9.]+', '', prompt)
+    prompt = re.sub(r':\s*[0-9.]+', ' ', prompt)
     # Optionally remove the remaining parentheses
-    prompt = prompt.replace('(', '').replace(')', '')
+    prompt = prompt.replace('(', ' ').replace(')', ' ').replace('[', ' ').replace(']', ' ').replace('\\', ' ')
+    # Collapse repeated whitespaces
+    prompt = re.sub(r'\s+', ' ', prompt)
     return prompt.strip()
 
 special_tags =  ['source_furry', 'source_anime', 'source_cartoon']
 special_tags += ['score_9', 'score_8_up', 'score_7_up', 'score_6_up', 'score_5_up', 'score_4_up']
 special_tags += ['rating_explicit', 'rating_questionable', 'rating_safe']
-special_tags += ['explicit', 'questionable', 'safe']
+special_tags += ['safe', 'questionable', 'explicit']
 special_tags += ['illustration', 'digital illustration art', 'official art', 'edit']
 special_tags += ['masterpiece', 'best quality', 'absurdres', 'hires', 'hi res', 'very awa', 'very aesthetic', '()',]
 special_tags += ['newest', 'year 2022', 'year 2023', 'year 2024', '2022', '2023', '2024']
