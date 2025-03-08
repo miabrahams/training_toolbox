@@ -4,7 +4,8 @@ from typing import Dict, List, Tuple
 from collections import Counter
 from pathlib import Path
 
-from .utils import extract_positive_prompt, clean_prompt
+from lib.prompt_parser import clean_prompt
+from lib.comfy_analysis import extract_positive_prompt
 
 class TagDatabase:
     """Handles database operations for prompt analysis."""
@@ -22,15 +23,12 @@ class TagDatabase:
             # Create prompt_texts table if it doesn't exist
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS prompt_texts (
-                    id INTEGER PRIMARY KEY,
-                    file_path TEXT UNIQUE ,
-                    original_prompt TEXT,
+                    file_path TEXT PRIMARY KEY REFERENCES prompts(file_path),
                     cleaned_prompt TEXT,
                     processed BOOLEAN DEFAULT 0,
                     last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
-            conn.execute('CREATE INDEX IF NOT EXISTS idx_file_path ON prompt_texts(file_path)')
             conn.execute('CREATE INDEX IF NOT EXISTS idx_cleaned_prompt ON prompt_texts(cleaned_prompt)')
             conn.commit()
 
@@ -38,8 +36,6 @@ class TagDatabase:
             self._update_prompt_texts_table(conn)
         finally:
             conn.close()
-
-
 
     def load_prompts(self) -> Tuple[Counter, Dict[str, str]]:
         """
@@ -72,67 +68,73 @@ class TagDatabase:
             conn.close()
 
     def _update_prompt_texts_table(self, conn):
-        """Update prompt_texts table with any new or modified entries."""
-        # Get existing file paths from prompt_texts table
-        cursor = conn.execute('SELECT file_path, original_prompt FROM prompt_texts')
-        existing_paths = {}
-        for row in cursor:
-            existing_paths[row[0]] = row[1]
+        """Update prompt_texts table with any new or modified entries using SQL joins."""
+        # Find new prompts that are not in prompt_texts
+        cursor = conn.execute('''
+            SELECT p.file_path, p.prompt
+            FROM prompts p
+            LEFT JOIN prompt_texts pt ON p.file_path = pt.file_path
+            WHERE pt.file_path IS NULL
+        ''')
+        new_prompts = cursor.fetchall()
+        print(f"Found {len(new_prompts)} new files to process")
 
-        # Get all file paths from the prompts table
-        cursor = conn.execute('SELECT file_path, prompt FROM prompts')
-        all_prompts = {row[0]: row[1] for row in cursor}
+        # Find modified prompts (by comparing last_modified timestamps)
+        cursor = conn.execute('''
+            SELECT p.file_path, p.prompt
+            FROM prompts p
+            JOIN prompt_texts pt ON p.file_path = pt.file_path
+            WHERE p.last_modified > pt.last_updated
+        ''')
+        modified_prompts = cursor.fetchall()
+        print(f"Found {len(modified_prompts)} modified prompts to update")
 
-        # Identify new paths that need processing
-        new_paths = set(all_prompts.keys()) - set(existing_paths.keys())
-
-        # Also check for prompts that may have been modified
-        modified_paths = []
-        for path in set(all_prompts.keys()) & set(existing_paths.keys()):
-            prompt_json = all_prompts[path]
-            try:
-                prompt = json.loads(prompt_json)
-                positive = extract_positive_prompt(prompt)
-                if path in existing_paths and positive != existing_paths[path]:
-                    modified_paths.append(path)
-            except:
-                # Skip error handling for now - if we can't parse it now, we likely couldn't before
-                pass
-
-        # Report on what we're doing
-        if new_paths:
-            print(f"Found {len(new_paths)} new files to process")
-        if modified_paths:
-            print(f"Found {len(modified_paths)} modified prompts to update")
-
-        paths_to_process = list(new_paths) + modified_paths
+        paths_to_process = new_prompts + modified_prompts
         if not paths_to_process:
             return
 
         processed_count = 0
         bad_images = []
+        failed_count = 0
 
         # Process new and modified paths
-        for file_path in paths_to_process:
+        for file_path, prompt_json in paths_to_process:
             try:
-                # Get the prompt JSON for this file
-                prompt_json = all_prompts[file_path]
-
+                # Parse the prompt JSON
                 prompt = json.loads(prompt_json)
-                positive = extract_positive_prompt(prompt)
+
+                # Extract positive prompt using the function from comfy_analysis
+                try:
+                    positive = extract_positive_prompt(prompt)
+                except:
+                    print(f"Failed {file_path} - could not extract positive prompt")
+                    failed_count += 1
+                    continue
+
+                # Check if we got a valid positive prompt
+                if not positive or positive == "":
+                    # Debug: print a bit more info about the failed prompt
+                    print(f"Failed {file_path} - no positive prompt found")
+                    if isinstance(prompt, dict):
+                        print(f"  Available keys: {list(prompt.keys())}")
+                    failed_count += 1
+                    continue
+
                 cleaned = clean_prompt(positive)
 
-                # For new paths, insert
-                if file_path in new_paths:
+                # Check if this is a new entry or an update
+                cursor = conn.execute('SELECT 1 FROM prompt_texts WHERE file_path = ?', (file_path,))
+                is_update = cursor.fetchone() is not None
+
+                if is_update:
                     conn.execute(
-                        'INSERT INTO prompt_texts (file_path, original_prompt, cleaned_prompt, processed) VALUES (?, ?, ?, 1)',
-                        (file_path, positive, cleaned)
+                        'UPDATE prompt_texts SET cleaned_prompt = ?, processed = 1, last_updated = CURRENT_TIMESTAMP WHERE file_path = ?',
+                        (cleaned, file_path)
                     )
-                # For modified paths, update
                 else:
                     conn.execute(
-                        'UPDATE prompt_texts SET original_prompt = ?, cleaned_prompt = ?, processed = 1, last_updated = CURRENT_TIMESTAMP WHERE file_path = ?',
-                        (positive, cleaned, file_path)
+                        'INSERT INTO prompt_texts (file_path, cleaned_prompt, processed) VALUES (?, ?, 1)',
+                        (file_path, cleaned)
                     )
 
                 processed_count += 1
@@ -141,7 +143,7 @@ class TagDatabase:
                 print(f"Error processing {file_path}: {e}")
 
         conn.commit()
-        print(f"Processed {processed_count} prompts, {len(bad_images)} failed")
+        print(f"Processed {processed_count} prompts, got nothing for {failed_count} prompts, {len(bad_images)} errored")
         if bad_images:
             print(f"Bad images: {bad_images[:10]}{'...' if len(bad_images) > 10 else ''}")
 

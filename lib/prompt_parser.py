@@ -1,6 +1,7 @@
 import re
 from collections import namedtuple
 from typing import List
+from collections import Counter
 
 re_attention = re.compile(r"""
 \\\(|
@@ -157,6 +158,16 @@ def sort_prompt_tokens(prompt: str) -> str:
     tokens = [token for token in tokens if token]
     tokens.sort()
     return ', '.join(tokens)
+
+
+def extract_tags_from_prompts(prompts: List[str], delimiter: str = ',') -> Counter:
+    """Extract and count individual tags from a list of prompts."""
+    all_tags = []
+    for prompt in prompts:
+        tags = [tag.strip() for tag in prompt.split(delimiter) if tag.strip()]
+        all_tags.extend(tags)
+    return Counter(all_tags)
+
 
 def clean_prompt(prompt: str) -> str:
     # First, strip out markup

@@ -1,21 +1,8 @@
 import difflib
-from collections import Counter
 from typing import List
 
 def noCallback(*args, **kwargs):
     pass
-
-
-def clean_prompt(prompt: str) -> str:
-    """Clean and normalize a prompt text"""
-    return prompt.strip() if prompt else ""
-
-def extract_positive_prompt(prompt: dict) -> str:
-    """Extract positive prompt from ComfyUI prompt format"""
-    try:
-        return prompt.get('positive', '')
-    except (AttributeError, TypeError):
-        return ''
 
 def common_tokens(prompts: List[str], delimiter: str = ',') -> List[str]:
     """Compute the intersection of tokens across all prompts in the cluster."""
@@ -33,14 +20,6 @@ def prompt_diffs(prompt: str, baseline: str) -> str:
     # Filter out unchanged tokens for clarity
     diff_result = ' '.join(token for token in diff if token.startswith('+') or token.startswith('-'))
     return diff_result
-
-def extract_tags_from_prompts(prompts: List[str], delimiter: str = ',') -> Counter:
-    """Extract and count individual tags from a list of prompts."""
-    all_tags = []
-    for prompt in prompts:
-        tags = [tag.strip() for tag in prompt.split(delimiter) if tag.strip()]
-        all_tags.extend(tags)
-    return Counter(all_tags)
 
 def normalize_tag_diff(tag: str) -> str:
     """

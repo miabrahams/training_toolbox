@@ -5,9 +5,8 @@ CREATE TABLE IF NOT EXISTS prompts (
 );
 
 CREATE TABLE prompt_texts (
-    id INTEGER PRIMARY KEY,
-    file_path TEXT UNIQUE ,
-    original_prompt TEXT,
+    file_path TEXT UNIQUE NOT NULL PRIMARY KEY REFERENCES prompts(file_path),
+    positive_prompt TEXT,
     cleaned_prompt TEXT,
     processed BOOLEAN DEFAULT 0,
     last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP

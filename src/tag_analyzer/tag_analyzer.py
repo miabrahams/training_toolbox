@@ -11,12 +11,11 @@ from sklearn.preprocessing import normalize
 import umap
 import hdbscan
 
+from lib.prompt_parser import extract_tags_from_prompts
 from .tag_analysis_data import TagAnalysisData
 from .database import TagDatabase
 from .utils import (
-    extract_tags_from_prompts, common_tokens,
-    prompt_diffs, extract_normalized_diffs,
-    noCallback
+    common_tokens, prompt_diffs, extract_normalized_diffs, noCallback
 )
 
 from .prompt_data import PromptData
