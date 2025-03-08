@@ -5,19 +5,16 @@ import numpy as np
 from typing import Dict, Any
 
 from src.tag_analyzer import TagAnalyzer, create_analyzer
+from pathlib import Path
 
 # Global analyzer instance
 analyzer: TagAnalyzer | None = None
 
-def initialize_analyzer(db_path, data_dir, force_recompute=False, progress=gr.Progress()):
+def initialize_analyzer(db_path: Path, data_dir: Path, force_recompute=False, progress=gr.Progress()):
     """Initialize the analyzer with given paths and display progress"""
     global analyzer
 
-    def progress_callback(progress_value, status_text):
-        progress(progress_value, status_text)
-
-    analyzer = TagAnalyzer(db_path=db_path, data_dir=data_dir)
-    analyzer.load_data(force_recompute=force_recompute, progress_callback=progress_callback)
+    analyzer = create_analyzer(db_path, data_dir, progress)
 
     if analyzer is not None and analyzer.clusters is not None:
         return f"Loaded {len(analyzer.prompt_texts)} prompts with {len(np.unique(analyzer.clusters))-1} clusters."
@@ -37,7 +34,7 @@ def get_cluster_summary(sample_size=5, screen_dirs=None, show_paths=False, progr
         sample_size=sample_size,
         screen_dirs=screen_dirs.split(",") if screen_dirs and screen_dirs.strip() else None,
         show_paths=show_paths,
-        progress_callback=progress_callback
+        progress=progress_callback
     )
 
     # Format the results for the UI
@@ -88,7 +85,7 @@ def analyze_directory(directory, sample_size=5, noise_sample=10, progress=gr.Pro
         directory=directory,
         sample_size=sample_size,
         noise_sample=noise_sample,
-        progress_callback=progress_callback
+        progress=progress_callback
     )
 
     # Format the results for the UI
@@ -147,7 +144,7 @@ def analyze_tags(top_n=20, include_noise=False, cluster_pairs=5, sample_size=10,
         include_noise=include_noise,
         cluster_pairs=cluster_pairs,
         sample_size=sample_size,
-        progress_callback=progress_callback
+        progress=progress_callback
     )
 
     # Format the results for the UI
@@ -201,7 +198,7 @@ def analyze_modifiers(top_n=50, sample_size=20, max_clusters=None,
         max_clusters=max_clusters,
         show_examples=show_examples,
         max_examples=max_examples,
-        progress_callback=progress_callback
+        progress=progress_callback
     )
 
     # Format the results for the UI
