@@ -5,9 +5,8 @@ from typing import Dict, Any
 
 from src.tag_analyzer import TagAnalyzer
 
-def get_cluster_summary(analyzer_state, sample_size=5, screen_dirs=None, show_paths=False, progress=gr.Progress()):
+def get_cluster_summary(analyzer: TagAnalyzer | None, sample_size=5, screen_dirs=None, show_paths=False, progress=gr.Progress()):
     """Get cluster summary for Gradio UI"""
-    analyzer: TagAnalyzer | None = analyzer_state.value
     if analyzer is None:
         return "Error: Analyzer not initialized. Please initialize first."
 
@@ -56,9 +55,8 @@ def get_cluster_summary(analyzer_state, sample_size=5, screen_dirs=None, show_pa
 
     return md_output
 
-def analyze_directory(analyzer_state, directory, sample_size=5, noise_sample=10, progress=gr.Progress()):
+def analyze_directory(analyzer: TagAnalyzer | None, directory, sample_size=5, noise_sample=10, progress=gr.Progress()):
     """Analyze directory contributions to clusters for Gradio UI"""
-    analyzer: TagAnalyzer | None = analyzer_state.value
     if analyzer is None:
         return "Error: Analyzer not initialized. Please initialize first."
 
@@ -114,9 +112,8 @@ def analyze_directory(analyzer_state, directory, sample_size=5, noise_sample=10,
 
     return md_output
 
-def analyze_tags(analyzer_state, top_n=20, include_noise=False, cluster_pairs=5, sample_size=10, progress=gr.Progress()):
+def analyze_tags(analyzer: TagAnalyzer | None, top_n=20, include_noise=False, cluster_pairs=5, sample_size=10, progress=gr.Progress()):
     """Analyze tag distribution for Gradio UI"""
-    analyzer: TagAnalyzer | None = analyzer_state.value
     if analyzer is None:
         return "Error: Analyzer not initialized. Please initialize first."
 
@@ -163,10 +160,9 @@ def analyze_tags(analyzer_state, top_n=20, include_noise=False, cluster_pairs=5,
 
     return md_output
 
-def analyze_modifiers(analyzer_state, top_n=50, sample_size=20, max_clusters=None,
+def analyze_modifiers(analyzer: TagAnalyzer | None, top_n=50, sample_size=20, max_clusters=None,
                       show_examples=False, max_examples=3, progress=gr.Progress()):
     """Analyze common modifiers for Gradio UI"""
-    analyzer: TagAnalyzer | None = analyzer_state.value
     if analyzer is None:
         return "Error: Analyzer not initialized. Please initialize first."
 
@@ -208,9 +204,8 @@ def analyze_modifiers(analyzer_state, top_n=50, sample_size=20, max_clusters=Non
 
     return md_output
 
-def generate_visualization(analyzer_state, sample_size=100, directory=None, with_diffs=False, progress=gr.Progress()):
+def generate_visualization(analyzer: TagAnalyzer | None, sample_size=100, directory=None, with_diffs=False, progress=gr.Progress()):
     """Generate cluster visualization for Gradio UI"""
-    analyzer: TagAnalyzer | None = analyzer_state.value
     if analyzer is None:
         return None, "Error: Analyzer not initialized. Please initialize first."
 
@@ -228,9 +223,8 @@ def generate_visualization(analyzer_state, sample_size=100, directory=None, with
     return plot_img, text_output
 
 # Functions for the more detailed UI components
-def generate_visualization_fn(analyzer_state, sample_size, directory, with_diffs):
+def generate_visualization_fn(analyzer: TagAnalyzer | None, sample_size, directory, with_diffs):
     """Generate visualization with more detailed return data for UI"""
-    analyzer: TagAnalyzer | None = analyzer_state.value
     if analyzer is None:
         return None, "### Error\n\nPlease load data first.", None, None
 
@@ -280,9 +274,8 @@ def generate_visualization_fn(analyzer_state, sample_size, directory, with_diffs
     except Exception as e:
         return None, f"### Error\n\n{str(e)}", None, None
 
-def generate_summary(analyzer_state, sample_size, screen_dirs_str, show_paths):
+def generate_summary(analyzer: TagAnalyzer | None, sample_size, screen_dirs_str, show_paths):
     """Generate summary with more detailed return data for UI"""
-    analyzer: TagAnalyzer | None = analyzer_state.value
     if analyzer is None:
         return "### Error\n\nPlease load data first.", {"error": "No data loaded"}
 
@@ -312,9 +305,8 @@ def generate_summary(analyzer_state, sample_size, screen_dirs_str, show_paths):
     except Exception as e:
         return f"### Error\n\n{str(e)}", {"error": str(e)}
 
-def analyze_directory_fn(analyzer_state, directory, sample_size, noise_sample):
+def analyze_directory_fn(analyzer: TagAnalyzer | None, directory, sample_size, noise_sample):
     """Analyze directory with more detailed return data for UI"""
-    analyzer: TagAnalyzer | None = analyzer_state.value
     if analyzer is None:
         return "### Error\n\nPlease load data first.", {"error": "No data loaded"}, None
 
@@ -351,9 +343,8 @@ def analyze_directory_fn(analyzer_state, directory, sample_size, noise_sample):
     except Exception as e:
         return f"### Error\n\n{str(e)}", {"error": str(e)}, None
 
-def analyze_tags_fn(analyzer_state, top_n, include_noise, cluster_pairs, sample_size):
+def analyze_tags_fn(analyzer: TagAnalyzer | None, top_n, include_noise, cluster_pairs, sample_size):
     """Analyze tags with more detailed return data for UI"""
-    analyzer: TagAnalyzer | None = analyzer_state.value
     if analyzer is None:
         return "### Error\n\nPlease load data first.", None, None
 
@@ -393,9 +384,8 @@ def analyze_tags_fn(analyzer_state, top_n, include_noise, cluster_pairs, sample_
     except Exception as e:
         return f"### Error\n\n{str(e)}", None, None
 
-def analyze_modifiers_fn(analyzer_state, top_n, sample_size, max_clusters, show_examples, max_examples):
+def analyze_modifiers_fn(analyzer: TagAnalyzer | None, top_n, sample_size, max_clusters, show_examples, max_examples):
     """Analyze modifiers with more detailed return data for UI"""
-    analyzer: TagAnalyzer | None = analyzer_state.value
     if analyzer is None:
         return "### Error\n\nPlease load data first.", None
 
@@ -428,9 +418,9 @@ def analyze_modifiers_fn(analyzer_state, top_n, sample_size, max_clusters, show_
     except Exception as e:
         return f"### Error\n\n{str(e)}", None
 
-def compute_analysis(analyzer_state, force_recompute=False, progress=gr.Progress()):
+def compute_analysis(analyzer: TagAnalyzer | None, force_recompute=False, progress=gr.Progress()):
     """Compute embeddings and clusters for the analyzer"""
-    analyzer = analyzer_state.value
+    # Note: analyzer is already unwrapped from gr.State by Gradio
     if analyzer is None:
         return "Error: Please load data first"
 
@@ -440,7 +430,6 @@ def compute_analysis(analyzer_state, force_recompute=False, progress=gr.Progress
     try:
         # Use the passed-in analyzer to compute analysis data
         analyzer._compute_analysis_data(
-            force_recompute=force_recompute,
             progress=progress_callback
         )
 
@@ -464,17 +453,22 @@ def create_tag_analysis_tab(analyzer_state: gr.State) -> Dict[str, Any]:
     Returns:
         Dict with tab components for incorporation into the main UI
     """
+    # Create a state indicator that will be updated by the load button
+    analyzer_loaded = gr.State(False)
+
     with gr.Tab("Tag Analysis") as tag_tab:
         with gr.Row():
             with gr.Column(scale=1):
                 gr.Markdown("## Analysis Settings")
 
+                # Add status indicator
+                load_status = gr.Markdown("**Status**: No analyzer loaded")
+
                 compute_btn = gr.Button("Compute Analysis", variant="primary")
 
                 analysis_status = gr.Textbox(
                     label="Analysis Status",
-                    value="Analysis not computed" if analyzer_state.value is None or
-                          analyzer_state.value.analysis is None else "Analysis loaded from disk"
+                    value="Analysis not computed"
                 )
 
                 force_recompute = gr.Checkbox(
@@ -633,6 +627,25 @@ def create_tag_analysis_tab(analyzer_state: gr.State) -> Dict[str, Any]:
                             cluster_samples = gr.JSON(label="Cluster Samples")
                             vis_stats = gr.JSON(label="Visualization Statistics")
 
+    # Function to update the UI when analyzer is loaded
+    def update_ui_on_load(analyzer):
+        """Update UI elements when analyzer is loaded"""
+        if analyzer is None:
+            return "**Status**: No analyzer loaded", "Analysis not computed", gr.update(interactive=False)
+
+        status_text = f"**Status**: Analyzer loaded with {len(analyzer.prompt_texts)} prompts"
+        analysis_text = "Analysis loaded from disk" if analyzer.analysis is not None else "Analysis not computed yet"
+        btn_update = gr.update(interactive=True)
+
+        return status_text, analysis_text, btn_update
+
+    # This lets us watch the analyzer_state value and update the UI when it changes
+    analyzer_state.change(
+        fn=update_ui_on_load,
+        inputs=[analyzer_state],
+        outputs=[load_status, analysis_status, compute_btn]
+    )
+
     # Connect compute button to compute_analysis function
     compute_btn.click(
         fn=compute_analysis,
@@ -702,4 +715,4 @@ def create_tag_analysis_tab(analyzer_state: gr.State) -> Dict[str, Any]:
         outputs=[plot_output, vis_stats, cluster_samples, vis_stats]
     )
 
-    return {"tab": tag_tab}
+    return {"tab": tag_tab, "update_fn": update_ui_on_load}
