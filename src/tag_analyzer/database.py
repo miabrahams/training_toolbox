@@ -33,6 +33,9 @@ class TagDatabase:
             conn.execute('CREATE INDEX IF NOT EXISTS idx_file_path ON prompt_texts(file_path)')
             conn.execute('CREATE INDEX IF NOT EXISTS idx_cleaned_prompt ON prompt_texts(cleaned_prompt)')
             conn.commit()
+
+            # Ensure prompt_texts table is populated
+            self._update_prompt_texts_table(conn)
         finally:
             conn.close()
 
@@ -71,48 +74,87 @@ class TagDatabase:
     def _update_prompt_texts_table(self, conn):
         """Update prompt_texts table with any new or modified entries."""
         # Get existing file paths from prompt_texts table
-        cursor = conn.execute('SELECT file_path FROM prompt_texts')
-        existing_paths = {row[0] for row in cursor}
+        cursor = conn.execute('SELECT file_path, original_prompt FROM prompt_texts')
+        existing_paths = {}
+        for row in cursor:
+            existing_paths[row[0]] = row[1]
 
         # Get all file paths from the prompts table
-        cursor = conn.execute('SELECT file_path FROM prompts')
-        all_paths = {row[0] for row in cursor}
+        cursor = conn.execute('SELECT file_path, prompt FROM prompts')
+        all_prompts = {row[0]: row[1] for row in cursor}
 
         # Identify new paths that need processing
-        new_paths = all_paths - existing_paths
+        new_paths = set(all_prompts.keys()) - set(existing_paths.keys())
 
+        # Also check for prompts that may have been modified
+        modified_paths = []
+        for path in set(all_prompts.keys()) & set(existing_paths.keys()):
+            prompt_json = all_prompts[path]
+            try:
+                prompt = json.loads(prompt_json)
+                positive = extract_positive_prompt(prompt)
+                if path in existing_paths and positive != existing_paths[path]:
+                    modified_paths.append(path)
+            except:
+                # Skip error handling for now - if we can't parse it now, we likely couldn't before
+                pass
+
+        # Report on what we're doing
         if new_paths:
             print(f"Found {len(new_paths)} new files to process")
-            processed_count = 0
-            bad_images = []
+        if modified_paths:
+            print(f"Found {len(modified_paths)} modified prompts to update")
 
-            # Process new paths
-            for file_path in new_paths:
-                try:
-                    # Get the prompt JSON for this file
-                    cursor = conn.execute('SELECT prompt FROM prompts WHERE file_path = ?', (file_path,))
-                    row = cursor.fetchone()
-                    if not row:
-                        continue
+        paths_to_process = list(new_paths) + modified_paths
+        if not paths_to_process:
+            return
 
-                    prompt_json = row[0]
-                    prompt = json.loads(prompt_json)
-                    positive = extract_positive_prompt(prompt)
-                    cleaned = clean_prompt(positive)
+        processed_count = 0
+        bad_images = []
 
-                    # Insert into prompt_texts table
+        # Process new and modified paths
+        for file_path in paths_to_process:
+            try:
+                # Get the prompt JSON for this file
+                prompt_json = all_prompts[file_path]
+
+                prompt = json.loads(prompt_json)
+                positive = extract_positive_prompt(prompt)
+                cleaned = clean_prompt(positive)
+
+                # For new paths, insert
+                if file_path in new_paths:
                     conn.execute(
                         'INSERT INTO prompt_texts (file_path, original_prompt, cleaned_prompt, processed) VALUES (?, ?, ?, 1)',
                         (file_path, positive, cleaned)
                     )
-                    processed_count += 1
-                except Exception as e:
-                    bad_images.append(file_path)
+                # For modified paths, update
+                else:
+                    conn.execute(
+                        'UPDATE prompt_texts SET original_prompt = ?, cleaned_prompt = ?, processed = 1, last_updated = CURRENT_TIMESTAMP WHERE file_path = ?',
+                        (positive, cleaned, file_path)
+                    )
 
-            conn.commit()
-            print(f"Processed {processed_count} new prompts, {len(bad_images)} failed")
-            if bad_images:
-                print(f"Bad images: {bad_images[:10]}{'...' if len(bad_images) > 10 else ''}")
+                processed_count += 1
+            except Exception as e:
+                bad_images.append(file_path)
+                print(f"Error processing {file_path}: {e}")
+
+        conn.commit()
+        print(f"Processed {processed_count} prompts, {len(bad_images)} failed")
+        if bad_images:
+            print(f"Bad images: {bad_images[:10]}{'...' if len(bad_images) > 10 else ''}")
+
+    def update_prompt_texts(self):
+        """
+        Force an update of the prompt_texts table from the prompts table.
+        Useful for manual calls to ensure database is up to date.
+        """
+        conn = sqlite3.connect(self.db_path)
+        try:
+            self._update_prompt_texts_table(conn)
+        finally:
+            conn.close()
 
     def get_image_paths(self, prompt_texts: List[str]) -> Dict[str, str]:
         """

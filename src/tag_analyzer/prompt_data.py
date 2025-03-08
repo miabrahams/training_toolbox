@@ -1,37 +1,49 @@
 from pathlib import Path
-from typing import Tuple, Callable, List, Dict
+from collections import Counter
+from typing import Dict, Tuple, Callable, Any
+
 from .database import TagDatabase
 from .utils import noCallback
-from collections import Counter
-
 
 class PromptData:
-    def __init__(self, prompt_texts: List[str], prompts: Counter, image_paths: Dict[str, str], data_dir: Path):
-        self.prompt_texts = prompt_texts
-        self.prompts = prompts
-        self.image_paths = image_paths
-        self.data_dir = data_dir
+    """Container for prompt data used by the tag analyzer"""
 
+    def __init__(self, prompt_texts=None, image_paths=None):
+        """Initialize with prompt texts and image paths"""
+        self.prompt_texts = list(prompt_texts) if prompt_texts else []
+        self.image_paths = image_paths or {}
+
+    @property
+    def prompts(self):
+        """Return list of prompt texts for compatibility with existing code"""
+        return self.prompt_texts
 
 def initialize_prompt_data(db_path: Path, progress: Callable = noCallback) -> Tuple[PromptData, TagDatabase]:
-    """Initialize prompt data from the database"""
-    progress(0.1, "Initializing database...")
+    """
+    Initialize prompt data from database
 
-    # Initialize the database
+    Args:
+        db_path: Path to the database file
+        progress: Progress callback function
+
+    Returns:
+        Tuple of (PromptData, TagDatabase)
+    """
+    progress(0.1, "Initializing database connection...")
     db = TagDatabase(db_path)
 
-    # Load prompts and image paths from the database
+    # Ensure the prompt_texts table is up to date
+    progress(0.3, "Updating prompt database...")
+    db.update_prompt_texts()
+
     progress(0.5, "Loading prompts from database...")
-    prompts_counter, image_paths = db.load_prompts()
-    prompt_texts = list(prompts_counter.keys())
+    # This will load data from the prompt_texts table
+    prompt_counter, image_paths = db.load_prompts()
 
-    # Create PromptData instance
-    prompt_data = PromptData(
-        prompt_texts=prompt_texts,
-        prompts=prompts_counter,
-        image_paths=image_paths,
-        data_dir=db_path.parent
-    )
+    # Convert counter to list of unique prompts
+    unique_prompts = list(prompt_counter.keys())
 
-    progress(1.0, "Prompt data loaded successfully")
-    return prompt_data, db
+    progress(0.9, f"Loaded {len(unique_prompts)} unique prompts")
+
+    # Create and return the PromptData object
+    return PromptData(prompt_texts=unique_prompts, image_paths=image_paths), db
