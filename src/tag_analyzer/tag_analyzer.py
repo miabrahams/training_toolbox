@@ -1,11 +1,10 @@
-
 import numpy as np
 import random
 from collections import Counter, defaultdict
 from typing import List, Optional, Callable
 import re
 import itertools
-from pathlib import Path
+import os
 
 from sentence_transformers import SentenceTransformer
 from sklearn.preprocessing import normalize
@@ -761,9 +760,10 @@ class TagAnalyzer:
 
 
 def create_analyzer(
-    prompt_data: PromptData,
-    db: TagDatabase,
-    data_dir: Path,
+    db_path,
+    data_dir,
+    prompt_data,
+    db,
     compute_analysis: bool = False,
     progress: Callable = noCallback,
 ):
@@ -771,9 +771,10 @@ def create_analyzer(
     Create and initialize a TagAnalyzer instance
 
     Args:
+        db_path: Path to the database file
+        data_dir: Path to directory to store/load analysis data
         prompt_data: PromptData instance with prompt texts and paths
         db: TagDatabase instance
-        data_dir: Path to directory to store/load analysis data
         compute_analysis: Whether to compute embeddings and clusters immediately
         progress: Progress callback function
 
@@ -784,7 +785,7 @@ def create_analyzer(
     analysis_data = TagAnalysisData.load_analysis_data(data_dir)
 
     analyzer = TagAnalyzer(
-        db_path=db.db_path,
+        db_path=db_path,
         data_dir=data_dir,
         prompt_data=prompt_data,
         analysis=analysis_data,
@@ -792,7 +793,7 @@ def create_analyzer(
     )
 
     # Only compute analysis data if requested and not already loaded
-    if compute_analysis and not analysis_data:
+    if compute_analysis and analysis_data is None:
         analyzer._compute_analysis_data(progress)
 
     return analyzer

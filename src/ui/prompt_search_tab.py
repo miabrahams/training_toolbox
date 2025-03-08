@@ -3,7 +3,7 @@ from typing import Dict, Any
 
 from src.tag_analyzer import TagAnalyzer
 
-def create_prompt_search_tab(analyzer: TagAnalyzer) -> Dict[str, Any]:
+def create_prompt_search_tab(analyzer_state: gr.State) -> Dict[str, Any]:
     """
     Create the prompt search tab for the Gradio UI
 
@@ -11,11 +11,14 @@ def create_prompt_search_tab(analyzer: TagAnalyzer) -> Dict[str, Any]:
         Dict with tab components for incorporation into the main UI
     """
 
-
     def search_prompts(query, case_sensitive=False, limit=500, progress=gr.Progress()):
         """Search prompts using the passed analyzer"""
         def progress_callback(progress_value, status_text):
             progress(progress_value, status_text)
+
+        if analyzer_state.value is None:
+            return "❌ Analyzer not initialized. Load data first.", None
+        analyzer: TagAnalyzer = analyzer_state.value
 
         result = analyzer.search_prompts(
             query=query,
