@@ -1,8 +1,10 @@
-import re
 import difflib
-import random
 from collections import Counter
-from typing import List, Dict, Set, Optional, Any
+from typing import List
+
+def noCallback(*args, **kwargs):
+    pass
+
 
 def clean_prompt(prompt: str) -> str:
     """Clean and normalize a prompt text"""

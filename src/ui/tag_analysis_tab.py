@@ -1,6 +1,5 @@
 import random
 import gradio as gr
-import os
 import numpy as np
 from typing import Dict, Any
 
@@ -10,11 +9,11 @@ from pathlib import Path
 # Global analyzer instance
 analyzer: TagAnalyzer | None = None
 
-def initialize_analyzer(db_path: Path, data_dir: Path, force_recompute=False, progress=gr.Progress()):
+def initialize_analyzer(db_path: str, data_dir: str, force_recompute=False, progress=gr.Progress()):
     """Initialize the analyzer with given paths and display progress"""
     global analyzer
 
-    analyzer = create_analyzer(db_path, data_dir, progress)
+    analyzer = create_analyzer(Path(db_path), Path(data_dir), progress)
 
     if analyzer is not None and analyzer.clusters is not None:
         return f"Loaded {len(analyzer.prompt_texts)} prompts with {len(np.unique(analyzer.clusters))-1} clusters."
@@ -439,13 +438,22 @@ def analyze_modifiers_fn(analyzer_instance, top_n, sample_size, max_clusters, sh
     except Exception as e:
         return f"### Error\n\n{str(e)}", None
 
-def create_tag_analysis_tab() -> Dict[str, Any]:
+def create_tag_analysis_tab(in_analyzer: TagAnalyzer) -> Dict[str, Any]:
     """
     Create the tag analysis tab for the Gradio UI
+
+    Args:
+        prompt_data: Initialized PromptData instance
+        db: Initialized TagDatabase instance
+        data_dir: Path to data directory
 
     Returns:
         Dict with tab components for incorporation into the main UI
     """
+    global analyzer
+    analyzer = in_analyzer
+
+    # Initialize the analyzer with provided data
     with gr.Tab("Tag Analysis") as tag_tab:
         with gr.Row():
             with gr.Column(scale=1):

@@ -1,7 +1,6 @@
-import os
 import json
 import sqlite3
-from typing import Dict, List, Tuple, Optional, Any
+from typing import Dict, List, Tuple
 from collections import Counter
 from pathlib import Path
 
@@ -11,11 +10,9 @@ class TagDatabase:
     """Handles database operations for prompt analysis."""
 
     def __init__(self, db_path: Path = Path("data/prompts.sqlite")):
-        """Initialize with database path."""
+        """Initialize database schema if needed."""
         self.db_path = db_path
 
-    def _init_database(self):
-        """Initialize database schema if needed."""
         if not self.db_path.exists():
             print(f"Database not found at {self.db_path}")
             return
@@ -26,7 +23,7 @@ class TagDatabase:
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS prompt_texts (
                     id INTEGER PRIMARY KEY,
-                    file_path TEXT UNIQUE,
+                    file_path TEXT UNIQUE ,
                     original_prompt TEXT,
                     cleaned_prompt TEXT,
                     processed BOOLEAN DEFAULT 0,

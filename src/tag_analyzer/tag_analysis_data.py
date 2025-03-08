@@ -1,7 +1,5 @@
 import os
 import numpy as np
-import pickle
-from typing import List
 from pathlib import Path
 
 class TagAnalysisData:
@@ -9,14 +7,12 @@ class TagAnalysisData:
     embeddings: np.ndarray
     reduced_embeddings: np.ndarray
     clusters: np.ndarray
-    prompt_texts: List[str]
     data_dir: Path
 
-    def __init__(self, embeddings: np.ndarray, reduced_embeddings: np.ndarray, clusters: np.ndarray, prompt_texts: List[str], data_dir: Path):
+    def __init__(self, embeddings: np.ndarray, reduced_embeddings: np.ndarray, clusters: np.ndarray, data_dir: Path):
         self.embeddings = embeddings
         self.reduced_embeddings = reduced_embeddings
         self.clusters = clusters
-        self.prompt_texts = prompt_texts
         self.data_dir = data_dir
 
 
@@ -35,10 +31,7 @@ class TagAnalysisData:
             reduced_embeddings = np.load(reduced_path)
             clusters = np.load(clusters_path)
 
-            with open(prompts_path, 'rb') as f:
-                prompt_texts = pickle.load(f)
-
-            return TagAnalysisData(embeddings, reduced_embeddings, clusters, prompt_texts, data_dir)
+            return TagAnalysisData(embeddings, reduced_embeddings, clusters, data_dir)
 
         return None
 
@@ -51,10 +44,6 @@ class TagAnalysisData:
         np.save(self.data_dir / 'embeddings.npy', self.embeddings)
         np.save(self.data_dir / 'reduced_embeddings.npy', self.reduced_embeddings)
         np.save(self.data_dir / 'clusters.npy', self.clusters)
-
-        # Save prompt texts to match with embeddings
-        with open(os.path.join(self.data_dir, 'prompt_texts.pkl'), 'wb') as f:
-            pickle.dump(self.prompt_texts, f)
 
         print(f"Analysis data saved to {self.data_dir}")
 

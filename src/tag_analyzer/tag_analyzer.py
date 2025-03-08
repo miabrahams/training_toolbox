@@ -2,7 +2,7 @@ import os
 import numpy as np
 import random
 from collections import Counter, defaultdict
-from typing import List, Dict, Optional, Callable
+from typing import List, Optional, Callable
 import re
 import itertools
 from pathlib import Path
@@ -12,31 +12,27 @@ from sklearn.preprocessing import normalize
 import umap
 import hdbscan
 
-from .analysisdata import TagAnalysisData
+from .tag_analysis_data import TagAnalysisData
 from .database import TagDatabase
 from .utils import (
     extract_tags_from_prompts, common_tokens,
-    prompt_diffs, extract_normalized_diffs
+    prompt_diffs, extract_normalized_diffs,
+    noCallback
 )
 
-def noCallback(*args, **kwargs):
-    pass
+from .prompt_data import PromptData
 
 class TagAnalyzer:
     def __init__(self,
                  db_path,
                  data_dir,
-                 prompt_texts: List[str],
-                 prompts: Counter,
-                 image_paths: Dict[str, str],
+                 prompt_data: PromptData,
                  analysis: Optional[TagAnalysisData],
                  db: TagDatabase):
         self.db_path = db_path
+        self.prompt_data = prompt_data
         self.data_dir = data_dir
         self.analysis = analysis
-        self.prompt_texts = prompt_texts
-        self.prompts = prompts
-        self.image_paths = image_paths
         self.db = db
 
     @property
@@ -57,13 +53,21 @@ class TagAnalyzer:
             return self.analysis.clusters
         raise ValueError("Analysis data not loaded.")
 
+    @property
+    def prompt_texts(self):
+        return self.prompt_data.prompt_texts
+
+    @property
+    def prompts(self):
+        return self.prompt_data.prompts
+
+    @property
+    def image_paths(self):
+        return self.prompt_data.image_paths
+
     def _compute_analysis_data(self, progress: Callable = noCallback):
         """Process data from scratch and generate embeddings and clusters."""
         progress(0.2, "Loading prompts from database...")
-
-        # Use TagDatabase to load prompts
-        self.prompts, self.image_paths = self.db.load_prompts()
-        self.prompt_texts = list(self.prompts.keys())
 
         # Run the analysis
         progress(0.3, "Analyzing prompts...")
@@ -74,7 +78,6 @@ class TagAnalyzer:
             embeddings=embeddings,
             reduced_embeddings=reduced_embeddings,
             clusters=clusters,
-            prompt_texts=self.prompt_texts,
             data_dir=self.data_dir
         )
 
@@ -83,6 +86,68 @@ class TagAnalyzer:
         self._save_analysis_data()
 
         return True
+
+    def search_prompts(self, query, case_sensitive=False, limit=500, progress: Callable = noCallback):
+        """
+        Search through prompts for a given query string.
+
+        Args:
+            query: The search string to look for
+            case_sensitive: Whether to perform case-sensitive search
+            limit: Maximum number of results to return
+            progress: Progress callback function
+
+        Returns:
+            Dict containing search results and stats
+        """
+        if not query:
+            return {"error": "Empty search query"}
+
+        progress(0.2, f"Searching prompts for: {query}")
+
+        # Prepare for search
+        results = []
+        match_count = 0
+
+        # Convert query to lowercase if case-insensitive search
+        if not case_sensitive:
+            search_query = query.lower()
+        else:
+            search_query = query
+
+        # Search through prompts
+        progress(0.4, "Processing prompts...")
+        for idx, prompt in enumerate(self.prompt_data.prompt_texts):
+            # Apply case sensitivity setting
+            compare_prompt = prompt if case_sensitive else prompt.lower()
+
+            if search_query in compare_prompt:
+                match_count += 1
+
+                # Add to results if under limit
+                if len(results) < limit:
+                    image_path = self.image_paths.get(prompt, None)
+
+                    # Get cluster information if available
+                    cluster_id = None
+                    if self.analysis and idx < len(self.clusters):
+                        cluster_id = int(self.clusters[idx])
+
+                    results.append({
+                        "prompt": prompt,
+                        "image_path": image_path,
+                        "cluster": cluster_id
+                    })
+
+        progress(1.0, f"Found {match_count} matches")
+
+        return {
+            "query": query,
+            "results": results,
+            "total_matches": match_count,
+            "limit_applied": match_count > limit,
+            "limit": limit
+        }
 
     def _analyze_prompts(self, progress: Callable = noCallback):
         """Generate embeddings, reduce dimensions, and cluster the prompts."""
@@ -696,35 +761,23 @@ class TagAnalyzer:
 
 
 def create_analyzer(
-        db_path=Path("data/prompts.sqlite"),
-        data_dir=Path("data"),
-        progress: Callable = noCallback,
-    ):
+    prompt_data: PromptData,
+    db: TagDatabase,
+    data_dir: Path,
+    progress: Callable = noCallback,
+):
     """Create and initialize a TagAnalyzer instance"""
-    progress(0.1, "Starting data loading process...")
-
-    # Initialize the database
-    db = TagDatabase(db_path)
-
-    # Load prompts and image paths from the database
-    prompts_counter, image_paths = db.load_prompts()
-    prompt_texts = list(prompts_counter.keys())
-
-    # Try to load existing analysis data
     analysis_data = TagAnalysisData.load_analysis_data(data_dir)
 
     analyzer = TagAnalyzer(
-        db_path=db_path,
+        db_path=db.db_path,
         data_dir=data_dir,
-        prompt_texts=prompt_texts,
-        prompts=prompts_counter,
-        image_paths=image_paths,
+        prompt_data=prompt_data,
         analysis=analysis_data,
         db=db
     )
 
     if not analysis_data:
-        # Compute analysis data from scratch
         analyzer._compute_analysis_data(progress)
 
     return analyzer
