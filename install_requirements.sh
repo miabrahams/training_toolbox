@@ -1,5 +1,4 @@
-uv install -r diffusers/examples/advanced_diffusion_training/requirements.txt
-
-uv pip install bitsandbytes
-uv pip install prodigy
-uv pip install datasets
+uv pip install -r src/requirements.txt
+uv pip install -r src/DuplicateInspector/requirements.txt
+uv pip install -r ComfyAutomation/requirements.txt
+uv pip install -r youtube_transcript/requirements.txt
