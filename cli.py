@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+
+"""
 import argparse
 from src.tag_analyzer import create_analyzer
 from src.tag_analyzer.prompt_data import initialize_prompt_data
@@ -124,7 +126,6 @@ commands:
         print_modifier_analysis(result)
 
 def print_cluster_summary(result):
-    """Print the cluster summary in a format similar to the original script."""
     if "error" in result:
         print(f"Error: {result['error']}")
         return
@@ -151,7 +152,6 @@ def print_cluster_summary(result):
     print(f"Total prompts: {stats['total_prompts']}")
 
 def visualize_result(result):
-    """Visualize the clusters using matplotlib."""
     if "error" in result:
         print(f"Error: {result['error']}")
         return
@@ -190,7 +190,6 @@ def visualize_result(result):
     plt.show()
 
 def print_directory_analysis(result):
-    """Print the directory analysis in a format similar to the original script."""
     if "error" in result:
         print(f"Error: {result['error']}")
         return
@@ -230,7 +229,6 @@ def print_directory_analysis(result):
             print(f"\n{i+1}. {prompt}")
 
 def print_tag_analysis(result):
-    """Print the tag analysis in a format similar to the original script."""
     if "error" in result:
         print(f"Error: {result['error']}")
         return
@@ -259,7 +257,6 @@ def print_tag_analysis(result):
                 print(f"  {tag}: {count}")
 
 def print_modifier_analysis(result):
-    """Print the modifier analysis in a format similar to the original script."""
     if "error" in result:
         print(f"Error: {result['error']}")
         return
@@ -282,3 +279,5 @@ def print_modifier_analysis(result):
 
 if __name__ == "__main__":
     main()
+
+"""
