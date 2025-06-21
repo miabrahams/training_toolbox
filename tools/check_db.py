@@ -12,6 +12,8 @@ def check_database(db_path):
     """Check database structure and sample data"""
     print(f"Checking database: {db_path}")
 
+    conn: sqlite3.Connection | None = None
+
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
@@ -79,7 +81,8 @@ def check_database(db_path):
     except Exception as e:
         print(f"Database error: {e}")
     finally:
-        conn.close()
+        if conn:
+            conn.close()
 
     print("Done")
 

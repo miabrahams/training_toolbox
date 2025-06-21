@@ -1,5 +1,8 @@
 .PHONY: analysis
 
+load_prompts:
+	cd golang && go run cmd/load/main.go -db ../data/prompts.sqlite -dir ~/ComfyUI/output
+
 analysis:
 	python tagging/comfy_mass_analysis.py -db data/prompts.sqlite -dir ~/ComfyUI/output
 

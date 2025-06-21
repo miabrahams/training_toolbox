@@ -26,6 +26,7 @@ for n, i in tqdm(enumerate(files)):
         img = skimage.transform.resize(img, (256, 256), anti_aliasing=True)
     except Exception as e:
         print(f"Could not read image file {i} - {e}")
+        continue
     for c in currentImages:
         if c is None:
             break

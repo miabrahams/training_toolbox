@@ -1,5 +1,6 @@
 import gradio as gr
 from typing import Dict, Any
+from src.tag_analyzer.types import ErrorResult
 
 from src.tag_analyzer import TagAnalyzer
 
@@ -19,31 +20,31 @@ def search_prompts(analyzer: TagAnalyzer | None, query, case_sensitive=False, li
     )
 
     # Format results for the UI
-    if "error" in result:
-        return result["error"], None
+    if isinstance(result, ErrorResult):
+        return result.error, None
 
     # Generate markdown output
-    md_output = f"# Search Results: '{result['query']}'\n\n"
-    md_output += f"Found {result['total_matches']} matches"
+    md_output = f"# Search Results: '{result.query}'\n\n"
+    md_output += f"Found {result.total_matches} matches"
 
-    if result['limit_applied']:
-        md_output += f" (showing first {result['limit']})"
+    if result.limit_applied:
+        md_output += f" (showing first {result.limit})"
     md_output += "\n\n"
 
     # Add results
-    for i, item in enumerate(result['results']):
+    for i, item in enumerate(result.results):
         md_output += f"### {i+1}. "
 
         # Add cluster info if available
-        if item['cluster'] is not None:
-            md_output += f"[Cluster {item['cluster']}] "
+        if item.cluster is not None:
+            md_output += f"[Cluster {item.cluster}] "
 
         # Add prompt
-        md_output += f"{item['prompt']}\n\n"
+        md_output += f"{item.prompt}\n\n"
 
         # Add image path if available
-        if item['image_path']:
-            md_output += f"Image: `{item['image_path']}`\n\n"
+        if item.image_path:
+            md_output += f"Image: `{item.image_path}`\n\n"
 
         md_output += "---\n\n"
 

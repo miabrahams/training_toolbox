@@ -28,7 +28,7 @@ def generate_image_pairs_html(duplicates_pairs, start_index, end_index):
             </div>
         '''
 
-        style = '''
+    style = '''
 .image-cell {
     display: flex;
     flex-direction: column;
@@ -75,7 +75,6 @@ def cached_hash(source_dir, hash_size, output_file):
     if os.path.exists(output_file):
         print("Found cached hashes. Loading...")
         hashes = pickle.load(open(output_file, "rb"))
-        example_hash = None
         # Remove files that no longer exist
         hashes = {filename: file_hash for filename, file_hash in hashes.items() if os.path.exists(os.path.join(source_dir, filename))}
 

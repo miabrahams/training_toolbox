@@ -114,7 +114,7 @@ def plot_gallery(title, images, n_col=n_col, n_row=n_row, cmap=plt.colormaps['gr
             vmax=vmax,
         )
         ax.axis("off")
-    fig.colorbar(im, ax=axs, orientation="horizontal", shrink=0.99, aspect=40, pad=0.01)
+        fig.colorbar(im, ax=axs, orientation="horizontal", shrink=0.99, aspect=40, pad=0.01)
     plt.show()
 
 plot_gallery("Images from dataset", img_centered[:n_components])

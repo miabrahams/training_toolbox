@@ -1,9 +1,9 @@
-import random
 import gradio as gr
 import numpy as np
 from typing import Dict, Any
 
 from src.tag_analyzer import TagAnalyzer
+from src.tag_analyzer.types import ErrorResult
 
 def get_cluster_summary(analyzer: TagAnalyzer | None, sample_size=5, screen_dirs=None, show_paths=False, progress=gr.Progress()):
     """Get cluster summary for Gradio UI"""
@@ -20,35 +20,34 @@ def get_cluster_summary(analyzer: TagAnalyzer | None, sample_size=5, screen_dirs
         progress=progress_callback
     )
 
-    # Format the results for the UI
-    if "error" in result:
-        return result["error"]
+    if isinstance(result, ErrorResult):
+        return result.error
 
     # Generate detailed markdown output
     md_output = "# Cluster Summary\n\n"
     md_output += "## Statistics\n\n"
-    md_output += f"- Total clusters: {result['stats']['total_clusters']}\n"
-    md_output += f"- Displayed clusters: {result['stats']['displayed_clusters']}\n"
-    md_output += f"- Noise points: {result['stats']['noise_points']}\n"
-    md_output += f"- Total prompts: {result['stats']['total_prompts']}\n"
+    md_output += f"- Total clusters: {result.stats.total_clusters}\n"
+    md_output += f"- Displayed clusters: {result.stats.displayed_clusters}\n"
+    md_output += f"- Noise points: {result.stats.noise_points}\n"
+    md_output += f"- Total prompts: {result.stats.total_prompts}\n"
 
     if screen_dirs:
         md_output += f"- Screened directories: {screen_dirs}\n"
-        md_output += f"- Clusters filtered out: {result['stats']['screened_clusters']}\n"
+        md_output += f"- Clusters filtered out: {result.stats.screened_clusters}\n"
 
     # Add cluster details
     md_output += "\n## Clusters\n\n"
 
-    for summary in result['summaries']:
-        md_output += f"### Cluster {summary['cluster_id']} - {summary['size']} prompts\n\n"
-        md_output += f"**Common tokens:** {', '.join(summary['common_tokens'])}\n\n"
-        md_output += f"**Representative prompt:** {summary['representative']}\n\n"
+    for summary in result.summaries:
+        md_output += f"### Cluster {summary.cluster_id} - {summary.size} prompts\n\n"
+        md_output += f"**Common tokens:** {', '.join(summary.common_tokens)}\n\n"
+        md_output += f"**Representative prompt:** {summary.representative}\n\n"
 
-        if show_paths and 'image_path' in summary and summary['image_path']:
-            md_output += f"**Image:** {summary['image_path']}\n\n"
+        if show_paths and summary.image_path:
+            md_output += f"**Image:** {summary.image_path}\n\n"
 
         md_output += "**Sample prompts:**\n\n"
-        for i, prompt in enumerate(summary.get('samples', [])[:5]):
+        for i, prompt in enumerate(summary.samples[:5]):
             md_output += f"{i+1}. {prompt}\n"
 
         md_output += "\n---\n\n"
@@ -70,44 +69,43 @@ def analyze_directory(analyzer: TagAnalyzer | None, directory, sample_size=5, no
         progress=progress_callback
     )
 
-    # Format the results for the UI
-    if "error" in result:
-        return result["error"]
+    if isinstance(result, ErrorResult):
+        return result.error
 
     # Generate detailed markdown output
-    md_output = f"# Directory Analysis: {result['directory']}\n\n"
-    md_output += f"## Statistics\n\n"
-    md_output += f"- Total images: {result['stats']['total_images']}\n"
-    md_output += f"- Clustered images: {result['stats']['clustered_images']}\n"
-    md_output += f"- Noise images: {result['stats']['noise_images']}\n"
-    md_output += f"- Cluster count: {result['stats']['cluster_count']}\n\n"
+    md_output = f"# Directory Analysis: {result.directory}\n\n"
+    md_output += "## Statistics\n\n"
+    md_output += f"- Total images: {result.stats.total_images}\n"
+    md_output += f"- Clustered images: {result.stats.clustered_images}\n"
+    md_output += f"- Noise images: {result.stats.noise_images}\n"
+    md_output += f"- Cluster count: {result.stats.cluster_count}\n\n"
 
     # Add cluster distribution
     md_output += "## Cluster Distribution\n\n"
 
     for cluster_id, data in sorted(
-        [(int(k), v) for k, v in result['clusters'].items()],
-        key=lambda x: x[1]['count'],
+        [(int(k), v) for k, v in result.clusters.items()],
+        key=lambda x: x[1].count,
         reverse=True
     ):
-        md_output += f"- Cluster {cluster_id}: {data['count']} images\n"
+        md_output += f"- Cluster {cluster_id}: {data.count} images\n"
 
     # Add sample prompts for each cluster
     md_output += "\n## Cluster Samples\n\n"
 
     for cluster_id, data in sorted(
-        [(int(k), v) for k, v in result['clusters'].items()],
+        [(int(k), v) for k, v in result.clusters.items()],
         key=lambda x: int(x[0])
     ):
-        md_output += f"### Cluster {cluster_id} ({data['count']} prompts)\n\n"
-        for i, prompt in enumerate(data['samples']):
+        md_output += f"### Cluster {cluster_id} ({data.count} prompts)\n\n"
+        for i, prompt in enumerate(data.samples):
             md_output += f"{i+1}. {prompt}\n"
         md_output += "\n"
 
     # Add noise samples if available
-    if result["noise_samples"]:
+    if result.noise_samples:
         md_output += "## Noise Cluster Samples\n\n"
-        for i, prompt in enumerate(result["noise_samples"]):
+        for i, prompt in enumerate(result.noise_samples):
             md_output += f"{i+1}. {prompt}\n"
 
     return md_output
@@ -128,33 +126,32 @@ def analyze_tags(analyzer: TagAnalyzer | None, top_n=20, include_noise=False, cl
         progress=progress_callback
     )
 
-    # Format the results for the UI
-    if "error" in result:
-        return result["error"]
+    if isinstance(result, ErrorResult):
+        return result.error
 
     # Generate detailed markdown output
     md_output = "# Tag Distribution Analysis\n\n"
 
     # Overall tag distribution
-    md_output += f"## Top {len(result['overall_tags'])} Tags Overall\n\n"
-    for tag, count in result['overall_tags'].items():
+    md_output += f"## Top {len(result.overall_tags)} Tags Overall\n\n"
+    for tag, count in result.overall_tags.items():
         md_output += f"- {tag}: {count}\n"
 
     # Per-cluster tag distribution
     md_output += "\n## Top Tags by Cluster\n\n"
-    for cluster_id, tags in sorted(result['cluster_tags'].items(), key=lambda x: int(x[0])):
+    for cluster_id, tags in sorted(result.cluster_tags.items(), key=lambda x: int(x[0])):
         md_output += f"### Cluster {cluster_id}\n\n"
         for tag, count in tags.items():
             md_output += f"- {tag}: {count}\n"
         md_output += "\n"
 
     # Cluster pair differences
-    if result['pair_differences']:
+    if result.pair_differences:
         md_output += "\n## Cluster Pair Differences\n\n"
-        for pair_key, pair_data in result['pair_differences'].items():
-            cluster_a, cluster_b = pair_data['clusters']
+        for pair_key, pair_data in result.pair_differences.items():
+            cluster_a, cluster_b = pair_data.clusters
             md_output += f"### Cluster {cluster_a} vs Cluster {cluster_b}\n\n"
-            for tag, count in pair_data['differences'].items():
+            for tag, count in pair_data.differences.items():
                 md_output += f"- {tag}: {count}\n"
             md_output += "\n"
 
@@ -181,21 +178,20 @@ def analyze_modifiers(analyzer: TagAnalyzer | None, top_n=50, sample_size=20, ma
         progress=progress_callback
     )
 
-    # Format the results for the UI
-    if "error" in result:
-        return result["error"]
+    if isinstance(result, ErrorResult):
+        return result.error
 
     # Generate detailed markdown output
-    md_output = f"# Common Tag Modifier Analysis\n\n"
-    md_output += f"## Top {len(result['modifiers'])} Tag Modifiers\n\n"
+    md_output = "# Common Tag Modifier Analysis\n\n"
+    md_output += f"## Top {len(result.modifiers)} Tag Modifiers\n\n"
 
-    for modifier, data in result['modifiers'].items():
-        md_output += f"### {modifier}: {data['count']} occurrences\n\n"
+    for modifier, data in result.modifiers.items():
+        md_output += f"### {modifier}: {data.count} occurrences\n\n"
 
         # If examples are included
-        if "examples" in data:
+        if data.examples:
             md_output += "Examples:\n\n"
-            for i, example in enumerate(data["examples"]):
+            for i, example in enumerate(data.examples):
                 # Truncate examples to keep output manageable
                 if len(example) > 100:
                     example = example[:100] + "..."
@@ -235,17 +231,17 @@ def generate_visualization_fn(analyzer: TagAnalyzer | None, sample_size, directo
             with_diffs=with_diffs
         )
 
-        if "error" in result:
-            return None, f"### Error\n\n{result['error']}", None, None
+        if isinstance(result, ErrorResult):
+            return None, f"### Error\n\n{result.error}", None, None
 
         # Create matplotlib figure from the result data
         import matplotlib.pyplot as plt
         fig = plt.figure(figsize=(10, 8))
 
         # Get data from points
-        x = [p["x"] for p in result["points"]]
-        y = [p["y"] for p in result["points"]]
-        clusters = [p["cluster"] for p in result["points"]]
+        x = [p.x for p in result.points]
+        y = [p.y for p in result.points]
+        clusters = [p.cluster for p in result.points]
 
         # Plot points
         scatter = plt.scatter(x, y, c=clusters, cmap='tab20', alpha=0.6, s=10)
@@ -256,18 +252,18 @@ def generate_visualization_fn(analyzer: TagAnalyzer | None, sample_size, directo
 
         # Get cluster samples for display
         cluster_samples_dict = {}
-        for cluster_id, data in result["cluster_samples"].items():
+        for cluster_id, data in result.cluster_samples.items():
             cluster_samples_dict[cluster_id] = {
-                "size": data["size"],
-                "common_tokens": data["common_tokens"],
-                "sample": random.choice(data["samples"]) # One sample per cluster
+                "size": data.size,
+                "common_tokens": data.common_tokens,
+                "sample": data.samples[0] if data.samples else None
             }
 
         # Create stats object
         vis_stats_dict = {
-            "total_clusters": result["total_clusters"],
-            "total_points": result["total_points"],
-            "noise_points": result["noise_points"]
+            "total_clusters": result.total_clusters,
+            "total_points": result.total_points,
+            "noise_points": result.noise_points
         }
 
         return fig, None, cluster_samples_dict, vis_stats_dict
@@ -291,17 +287,20 @@ def generate_summary(analyzer: TagAnalyzer | None, sample_size, screen_dirs_str,
             show_paths=show_paths
         )
 
+        if isinstance(result, ErrorResult):
+            return f"### Error\n\n{result.error}", {"error": result.error}
+
         # Format output for Markdown
         md_output = "### Cluster Summary\n\n"
-        for summary in result['summaries']:
-            md_output += f"#### Cluster {summary['cluster_id']} - {summary['size']} prompts\n\n"
-            md_output += f"Common tokens: {', '.join(summary['common_tokens'])}\n\n"
-            md_output += f"Representative prompt: {summary['representative']}\n\n"
-            if show_paths and 'image_path' in summary and summary['image_path']:
-                md_output += f"Representative image: {summary['image_path']}\n\n"
+        for summary in result.summaries:
+            md_output += f"#### Cluster {summary.cluster_id} - {summary.size} prompts\n\n"
+            md_output += f"Common tokens: {', '.join(summary.common_tokens)}\n\n"
+            md_output += f"Representative prompt: {summary.representative}\n\n"
+            if show_paths and summary.image_path:
+                md_output += f"Representative image: {summary.image_path}\n\n"
             md_output += "---\n\n"
 
-        return md_output, result['stats']
+        return md_output, result.stats
     except Exception as e:
         return f"### Error\n\n{str(e)}", {"error": str(e)}
 
@@ -317,29 +316,32 @@ def analyze_directory_fn(analyzer: TagAnalyzer | None, directory, sample_size, n
             noise_sample=noise_sample
         )
 
+        if isinstance(result, ErrorResult):
+            return f"### Error\n\n{result.error}", {"error": result.error}, None
+
         # Format output for Markdown
-        md_output = f"### Directory Analysis: {result['directory']}\n\n"
-        md_output += f"Total images: {result['stats']['total_images']}\n\n"
-        md_output += f"Clustered images: {result['stats']['clustered_images']}\n\n"
-        md_output += f"Noise images: {result['stats']['noise_images']}\n\n"
-        md_output += f"Contributing to {result['stats']['cluster_count']} clusters\n\n"
+        md_output = f"### Directory Analysis: {result.directory}\n\n"
+        md_output += f"Total images: {result.stats.total_images}\n\n"
+        md_output += f"Clustered images: {result.stats.clustered_images}\n\n"
+        md_output += f"Noise images: {result.stats.noise_images}\n\n"
+        md_output += f"Contributing to {result.stats.cluster_count} clusters\n\n"
 
         # Add cluster distribution
         md_output += "#### Cluster Distribution\n\n"
         for cluster_id, data in sorted(
-            [(int(k), v) for k, v in result['clusters'].items()],
-            key=lambda x: x[1]['count'],
+            [(int(k), v) for k, v in result.clusters.items()],
+            key=lambda x: x[1].count,
             reverse=True
         ):
-            md_output += f"Cluster {cluster_id}: {data['count']} images\n\n"
+            md_output += f"Cluster {cluster_id}: {data.count} images\n\n"
 
         # Add noise samples if available
-        if result["noise_samples"]:
+        if result.noise_samples:
             md_output += "#### Noise Samples\n\n"
-            for i, prompt in enumerate(result["noise_samples"]):
+            for i, prompt in enumerate(result.noise_samples):
                 md_output += f"{i+1}. {prompt}\n\n"
 
-        return md_output, result['stats'], result['clusters']
+        return md_output, result.stats, result.clusters
     except Exception as e:
         return f"### Error\n\n{str(e)}", {"error": str(e)}, None
 
@@ -356,31 +358,34 @@ def analyze_tags_fn(analyzer: TagAnalyzer | None, top_n, include_noise, cluster_
             sample_size=sample_size
         )
 
+        if isinstance(result, ErrorResult):
+            return f"### Error\n\n{result.error}", None, None
+
         # Format output for Markdown
         md_output = "### Tag Analysis\n\n"
 
         # Overall tags
         md_output += "#### Overall Top Tags\n\n"
-        for tag, count in result['overall_tags'].items():
+        for tag, count in result.overall_tags.items():
             md_output += f"{tag}: {count}\n\n"
 
         # Per-cluster tags (summary)
         md_output += "#### Cluster Tag Summary\n\n"
-        for cluster_id, tags in sorted(result['cluster_tags'].items(), key=lambda x: int(x[0])):
+        for cluster_id, tags in sorted(result.cluster_tags.items(), key=lambda x: int(x[0])):
             md_output += f"Cluster {cluster_id}: "
             md_output += ", ".join([f"{tag} ({count})" for tag, count in tags.items()])
             md_output += "\n\n"
 
         # Pair differences (summary)
-        if result['pair_differences']:
+        if result.pair_differences:
             md_output += "#### Cluster Pair Differences\n\n"
-            for pair_key, pair_data in result['pair_differences'].items():
-                cluster_a, cluster_b = pair_data['clusters']
+            for pair_key, pair_data in result.pair_differences.items():
+                cluster_a, cluster_b = pair_data.clusters
                 md_output += f"Clusters {cluster_a} vs {cluster_b}: "
-                md_output += ", ".join([f"{tag} ({count})" for tag, count in pair_data['differences'].items()])
+                md_output += ", ".join([f"{tag} ({count})" for tag, count in pair_data.differences.items()])
                 md_output += "\n\n"
 
-        return md_output, result['overall_tags'], result['cluster_tags']
+        return md_output, result.overall_tags, result.cluster_tags
     except Exception as e:
         return f"### Error\n\n{str(e)}", None, None
 
@@ -398,17 +403,20 @@ def analyze_modifiers_fn(analyzer: TagAnalyzer | None, top_n, sample_size, max_c
             max_examples=max_examples
         )
 
+        if isinstance(result, ErrorResult):
+            return f"### Error\n\n{result.error}", None
+
         # Format output for Markdown
         md_output = "### Modifier Analysis\n\n"
 
         # List modifiers
         md_output += "#### Top Modifiers\n\n"
-        for modifier, data in result['modifiers'].items():
-            md_output += f"**{modifier}**: {data['count']} occurrences\n\n"
+        for modifier, data in result.modifiers.items():
+            md_output += f"**{modifier}**: {data.count} occurrences\n\n"
 
-            if show_examples and "examples" in data:
+            if show_examples and data.examples:
                 md_output += "Examples:\n\n"
-                for i, example in enumerate(data["examples"]):
+                for i, example in enumerate(data.examples):
                     # Truncate examples to keep output manageable
                     if len(example) > 100:
                         example = example[:100] + "..."
@@ -418,7 +426,7 @@ def analyze_modifiers_fn(analyzer: TagAnalyzer | None, top_n, sample_size, max_c
     except Exception as e:
         return f"### Error\n\n{str(e)}", None
 
-def compute_analysis(analyzer: TagAnalyzer | None, force_recompute=False, progress=gr.Progress()):
+def compute_analysis(analyzer: TagAnalyzer | None, progress=gr.Progress()):
     """Compute embeddings and clusters for the analyzer"""
     # Note: analyzer is already unwrapped from gr.State by Gradio
     if analyzer is None:
@@ -453,9 +461,6 @@ def create_tag_analysis_tab(analyzer_state: gr.State) -> Dict[str, Any]:
     Returns:
         Dict with tab components for incorporation into the main UI
     """
-    # Create a state indicator that will be updated by the load button
-    analyzer_loaded = gr.State(False)
-
     with gr.Tab("Tag Analysis") as tag_tab:
         with gr.Row():
             with gr.Column(scale=1):
