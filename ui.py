@@ -15,13 +15,13 @@ default_db_path = "data/prompts.sqlite"
 default_data_dir = "data"
 
 
-def initialize_analyzer(db_path: Path, data_dir: Path, prompt_data: PromptData, db: TagDatabase,
+# The analyzer is designed to support GUI and TUI front-ends, so initialization functions are separated.
+def initialize_analyzer(data_dir: Path, prompt_data: PromptData, db: TagDatabase,
                         force_recompute=False, progress=gr.Progress()):
     """Initialize the analyzer with given paths and display progress"""
     try:
         # Create analyzer without computing clusters (unless forced)
         analyzer = create_analyzer(
-            db_path=db_path,
             data_dir=data_dir,
             prompt_data=prompt_data,
             db=db,
@@ -83,7 +83,6 @@ with gr.Blocks() as app:
 
             # Initialize analyzer without computing analysis yet
             status_msg, analyzer = initialize_analyzer(
-                db_path=db_path_obj,
                 data_dir=data_dir_obj,
                 prompt_data=prompt_data,
                 db=db,
@@ -113,4 +112,4 @@ with gr.Blocks() as app:
         prompt_search_components = create_prompt_search_tab(analyzer_state)
 
 if __name__ == "__main__":
-    app.launch()
+    app.launch(server_port=7000)

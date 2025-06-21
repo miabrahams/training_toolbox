@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 from src.tag_analyzer import create_analyzer
+from src.tag_analyzer.prompt_data import initialize_prompt_data
 
 def main():
     # Create the top-level parser
@@ -65,12 +66,18 @@ commands:
         parser.print_help()
         return
 
-    # Create and initialize the analyzer
+    def progress(x, y):
+        return print(f"Progress: {x*100:.1f}% - {y}")
+    prompt_data, db = initialize_prompt_data(args.db, progress)
+
     analyzer = create_analyzer(
-        db_path=args.db,
         data_dir=args.data_dir,
-        force_recompute=args.force_recompute
+        prompt_data=prompt_data,
+        db=db,
+        compute_analysis=args.force_recompute,
+        progress=progress
     )
+
 
     # Execute the appropriate command
     if args.command == 'summary':
@@ -82,7 +89,6 @@ commands:
         print_cluster_summary(result)
 
     elif args.command == 'visualize':
-        import matplotlib.pyplot as plt
         result = analyzer.generate_visualization(
             sample_size=args.sample_size,
             directory=args.directory,

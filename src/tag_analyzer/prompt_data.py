@@ -1,6 +1,6 @@
 from pathlib import Path
 from collections import Counter
-from typing import Dict, Tuple, Callable, Any, List
+from typing import Dict, Tuple, Callable, List
 import sqlite3
 import os
 
@@ -23,11 +23,11 @@ class PromptData:
         self.prompts = prompts_counter
         self.image_paths = image_paths
 
-    def get_image_path(self, prompt: str) -> str:
+    def get_image_path(self, prompt: str) -> str | None:
         """Get image path for a given prompt."""
         return self.image_paths.get(prompt)
 
-    def get_file_name(self, prompt: str) -> str:
+    def get_file_name(self, prompt: str) -> str | None:
         """Get just the file name without the directory path."""
         path = self.get_image_path(prompt)
         if path:
@@ -70,16 +70,6 @@ class PromptData:
         return cls(prompt_texts, prompts_counter, image_paths)
 
 def initialize_prompt_data(db_path: Path, progress: Callable = noCallback) -> Tuple[PromptData, TagDatabase]:
-    """
-    Initialize prompt data from database
-
-    Args:
-        db_path: Path to the database file
-        progress: Progress callback function
-
-    Returns:
-        Tuple of (PromptData, TagDatabase)
-    """
     progress(0.1, "Initializing database connection...")
     db = TagDatabase(db_path)
 

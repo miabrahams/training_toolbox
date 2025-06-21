@@ -106,8 +106,8 @@ class TagDatabase:
                 # Extract positive prompt using the function from comfy_analysis
                 try:
                     positive = extract_positive_prompt(prompt)
-                except:
-                    print(f"Failed {file_path} - could not extract positive prompt")
+                except Exception as e:
+                    print(f"Failed {file_path} - could not extract positive prompt", e)
                     failed_count += 1
                     continue
 
