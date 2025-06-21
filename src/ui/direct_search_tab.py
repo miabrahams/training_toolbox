@@ -57,8 +57,8 @@ def create_direct_search_tab(db_state: gr.State) -> Dict[str, Any]:
                 with gr.Row():
                     limit = gr.Slider(
                         minimum=10,
-                        maximum=500,
-                        value=100,
+                        maximum=2000,
+                        value=250,
                         step=10,
                         label="Result Limit"
                     )
@@ -68,21 +68,6 @@ def create_direct_search_tab(db_state: gr.State) -> Dict[str, Any]:
                 search_output = gr.Markdown("Enter a search query to see results.")
             with gr.Column(scale=1):
                 result_data = gr.JSON(label="Result Data")
-
-        # State for debouncing
-        last_call = gr.State(0)
-
-        # Debouncer wrapper for search function
-        def debounced_search(db, query, limit, last_call_time):
-            """A debounced version of the search function"""
-            current_time = time.time()
-            if current_time - last_call_time < 0.5:
-                # Not enough time passed, so we skip the update
-                return gr.skip(), gr.skip(), last_call_time
-
-            # Run the search
-            output, data = direct_search(db, query, limit)
-            return output, data, current_time
 
         # Function to update the UI when database is loaded
         def update_ui_on_load(db):
@@ -98,12 +83,25 @@ def create_direct_search_tab(db_state: gr.State) -> Dict[str, Any]:
             outputs=[search_status, query]
         )
 
-        # Connect search query to search function with debouncing
+
+        # Debouncing
+        last_search_time = gr.State(0)
+
+        def debounced_search(db, query, limit, last_call_time):
+            current_time = time.time()
+            if current_time - last_call_time < 0.5:
+                return gr.skip(), gr.skip(), last_call_time
+
+            # Run the search
+            output, data = direct_search(db, query, limit)
+            return output, data, current_time
+
         query.change(
             fn=debounced_search,
-            inputs=[db_state, query, limit, last_call],
-            outputs=[search_output, result_data, last_call],
-            show_progress="hidden"
+            inputs=[db_state, query, limit, last_search_time],
+            outputs=[search_output, result_data, last_search_time],
+            show_progress="hidden",
+            trigger_mode="always_last"
         )
 
     return {"tab": direct_search_tab}

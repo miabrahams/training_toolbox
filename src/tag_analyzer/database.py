@@ -154,35 +154,31 @@ class TagDatabase:
 
     def search_positive_prompts(self, query: str, limit: int = 50) -> List[Dict[str, str]]:
         """
-        Search for prompts containing the query text in the positive_prompt field.
-
-        Args:
-            query: The text to search for.
-            limit: The maximum number of results to return.
-
-        Returns:
-            A list of dictionaries, each containing 'file_path' and 'positive_prompt'.
+        Search for unique prompts containing the query text in the positive_prompt field.
+        Returns the most recent file_path for each unique prompt.
         """
         if not query:
             return []
 
         conn = sqlite3.connect(self.db_path)
         try:
-            # Use a LIKE query to find matches
-            # The '%' wildcards allow for matching anywhere in the string
             sql_query = '''
-                SELECT file_path, positive_prompt
-                FROM prompt_texts
-                WHERE positive_prompt LIKE ?
-                ORDER BY last_updated DESC
+                SELECT pt.positive_prompt, pt.file_path
+                FROM prompt_texts pt
+                INNER JOIN (
+                    SELECT positive_prompt, max(last_updated) as max_updated
+                    FROM prompt_texts
+                    WHERE positive_prompt LIKE ?
+                    GROUP BY positive_prompt
+                ) grouped
+                ON pt.positive_prompt = grouped.positive_prompt AND pt.last_updated = grouped.max_updated
+                WHERE pt.positive_prompt LIKE ?
+                ORDER BY pt.last_updated DESC
                 LIMIT ?
             '''
-            # Add wildcards to the query string for the LIKE operator
             search_term = f'%{query}%'
-
-            cursor = conn.execute(sql_query, (search_term, limit))
-            results = [{'file_path': row[0], 'positive_prompt': row[1]} for row in cursor.fetchall()]
-
+            cursor = conn.execute(sql_query, (search_term, search_term, limit))
+            results = [{'file_path': row[1], 'positive_prompt': row[0]} for row in cursor.fetchall()]
             return results
         finally:
             conn.close()
