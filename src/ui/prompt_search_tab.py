@@ -124,4 +124,4 @@ def create_prompt_search_tab(analyzer_state: gr.State) -> Dict[str, Any]:
             outputs=[search_output, result_data]
         )
 
-    return {"tab": search_tab, "update_fn": update_ui_on_load}
+    return {"tab": search_tab}

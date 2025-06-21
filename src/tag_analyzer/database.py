@@ -152,6 +152,41 @@ class TagDatabase:
         if bad_images:
             print(f"Bad images: {bad_images[:10]}{'...' if len(bad_images) > 10 else ''}")
 
+    def search_positive_prompts(self, query: str, limit: int = 50) -> List[Dict[str, str]]:
+        """
+        Search for prompts containing the query text in the positive_prompt field.
+
+        Args:
+            query: The text to search for.
+            limit: The maximum number of results to return.
+
+        Returns:
+            A list of dictionaries, each containing 'file_path' and 'positive_prompt'.
+        """
+        if not query:
+            return []
+
+        conn = sqlite3.connect(self.db_path)
+        try:
+            # Use a LIKE query to find matches
+            # The '%' wildcards allow for matching anywhere in the string
+            sql_query = '''
+                SELECT file_path, positive_prompt
+                FROM prompt_texts
+                WHERE positive_prompt LIKE ?
+                ORDER BY last_updated DESC
+                LIMIT ?
+            '''
+            # Add wildcards to the query string for the LIKE operator
+            search_term = f'%{query}%'
+
+            cursor = conn.execute(sql_query, (search_term, limit))
+            results = [{'file_path': row[0], 'positive_prompt': row[1]} for row in cursor.fetchall()]
+
+            return results
+        finally:
+            conn.close()
+
     def update_prompt_texts(self):
         """
         Force an update of the prompt_texts table from the prompts table.

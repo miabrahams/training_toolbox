@@ -6,6 +6,7 @@ from pathlib import Path
 from src.ui.tag_analysis_tab import create_tag_analysis_tab
 from src.ui.frame_extractor_tab import create_frame_extractor_tab
 from src.ui.prompt_search_tab import create_prompt_search_tab
+from src.ui.direct_search_tab import create_direct_search_tab
 from src.tag_analyzer.prompt_data import initialize_prompt_data, PromptData
 from src.tag_analyzer import create_analyzer
 from src.tag_analyzer.database import TagDatabase
@@ -110,6 +111,9 @@ with gr.Blocks() as app:
 
         # Add prompt search tab with analyzer_state
         prompt_search_components = create_prompt_search_tab(analyzer_state)
+
+        # Add direct search tab
+        direct_search_components = create_direct_search_tab(db_state)
 
 if __name__ == "__main__":
     app.launch(server_port=7000)
