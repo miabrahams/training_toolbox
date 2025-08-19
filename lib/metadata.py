@@ -27,7 +27,9 @@ def nai_to_webui(prompt):
     # NAI strength adjustment is 1.05 per parentheses instead of 1.1
     # So this isn't an exact replacement, but good enough for now maybe
     replacements = {'{': '(', '}': ')'}
-    return ''.join([replacements.get(char, char) for char in prompt])
+    return ''.join([result for result in
+                        [replacements.get(char, char) for char in prompt]
+                    if result])
 
 
 def parse_software_metadata(meta_item, software):
