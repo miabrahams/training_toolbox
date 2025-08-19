@@ -48,13 +48,22 @@ type PostTag struct {
 // queries
 
 var (
-	postsQuery = `
+	postsQueryHeader = `
 			SELECT p.* FROM posts p
 			JOIN post_tags pt ON p.id = pt.post_id
 			JOIN tags t ON pt.tag_id = t.tag_id
+			`
+	tagNameCond = `
 			WHERE t.name = ?
+			`
+	postsScoreCond = `
 			AND p.score > ?
+			`
+	randCond = `
 			ORDER BY random()
+			`
+	limitCond = `
+			LIMIT ?
 			`
 	countQuery = `
 			SELECT COUNT(*) FROM (
@@ -67,58 +76,128 @@ var (
 		`
 )
 
-func FindPostsWithTag(ctx context.Context, db *sqlx.DB, tag string, minScore int) error {
-	slog.Info("finding posts with tag", "tag", tag)
-	var posts []Post
-	if err := db.SelectContext(ctx, &posts, postsQuery, tag, minScore); err != nil {
-		return fmt.Errorf("find posts with tag %s: %w", tag, err)
-	}
+type FindPostsOptions struct {
+	Tag      string
+	MinScore *int
+	Count    int
+	Limit    int
+	Random   bool
+}
 
-	for _, post := range posts[:10] {
-		slog.Info("found post", "post", post)
+func FindPostsWithTag(ctx context.Context, db *sqlx.DB, opts FindPostsOptions) ([]Post, error) {
+
+	queryBuilder := strings.Builder{}
+	queryBuilder.WriteString(postsQueryHeader)
+	args := make([]any, 0, 3)
+	queryBuilder.WriteString(tagNameCond)
+	args = append(args, opts.Tag)
+	if opts.MinScore != nil {
+		queryBuilder.WriteString(postsScoreCond)
+		args = append(args, *opts.MinScore)
+	}
+	if opts.Random {
+		queryBuilder.WriteString(randCond)
+	}
+	limit := 10
+	if opts.Limit > 0 {
+		limit = opts.Limit
+	}
+	args = append(args, limit)
+	queryBuilder.WriteString(limitCond)
+
+	var posts []Post
+	if err := db.SelectContext(ctx, &posts, queryBuilder.String(), args...); err != nil {
+		return nil, fmt.Errorf("find posts with tag %s: %w", opts.Tag, err)
 	}
 
 	var count []int64
-	if err := db.SelectContext(ctx, &count, countQuery, tag, minScore); err != nil {
-		return fmt.Errorf("count posts with tag %s: %w", tag, err)
+	if err := db.SelectContext(ctx, &count, countQuery, opts.Tag, opts.MinScore); err != nil {
+		return nil, fmt.Errorf("count posts with tag %s: %w", opts.Tag, err)
 	}
-	slog.Info("count of posts with tag", "tag", tag, "count", count)
-	return nil
+	slog.Info("count of posts with tag", "tag", opts.Tag, "count", count)
+	return posts, nil
 }
+
+/* Example query:
+query := `
+select p.*, t.tags FROM
+(
+	SELECT p.*
+	FROM posts p
+	JOIN post_tags pt ON p.id = pt.post_id
+	JOIN tags t ON pt.tag_id = t.tag_id
+	WHERE t.name = ?
+	AND p.score > ?
+	ORDER BY random()
+	limit 5
+) p
+JOIN (
+	SELECT pt.post_id, array_agg(tg.name) as tags
+	FROM post_tags pt
+	JOIN tags tg ON pt.tag_id = tg.tag_id
+	GROUP BY post_id
+) t
+ON p.id = t.post_id
+`
+*/
+
+var (
+	taggedPostHeader = `
+		select p.*, t.tags FROM
+		(
+		`
+	taggedPostPostHeader = `
+			SELECT p.*
+			FROM posts p
+			JOIN post_tags pt ON p.id = pt.post_id
+			JOIN tags t ON pt.tag_id = t.tag_id
+			`
+	taggedPostFinal = `
+		) p
+		JOIN (
+			SELECT pt.post_id, array_agg(tg.name) as tags
+			FROM post_tags pt
+			JOIN tags tg ON pt.tag_id = tg.tag_id
+			GROUP BY post_id
+		) t
+		ON p.id = t.post_id
+	`
+)
 
 type TaggedPost struct {
 	Post
 	Tags []any `db:"tags"`
 }
 
-func FindTagString(ctx context.Context, db *sqlx.DB, tag string, minScore int) ([]TaggedPost, error) {
-	query := `
-	select p.*, t.tags FROM
-	(
-		SELECT p.*
-		FROM posts p
-		JOIN post_tags pt ON p.id = pt.post_id
-		JOIN tags t ON pt.tag_id = t.tag_id
-		WHERE t.name = ?
-		AND p.score > ?
-		ORDER BY random()
-		limit 5
-	) p
-	JOIN (
-		SELECT pt.post_id, array_agg(tg.name) as tags
-		FROM post_tags pt
-		JOIN tags tg ON pt.tag_id = tg.tag_id
-		GROUP BY post_id
-	) t
-	ON p.id = t.post_id
-	`
-
+// FindTagString searches the database for posts matching the given conditions.
+// Each post is returned with an array of tags in string format.
+func FindTagString(ctx context.Context, db *sqlx.DB, opts FindPostsOptions) ([]TaggedPost, error) {
+	queryBuilder := strings.Builder{}
+	args := make([]any, 0, 3)
+	queryBuilder.WriteString(taggedPostHeader)
+	queryBuilder.WriteString(taggedPostPostHeader)
+	queryBuilder.WriteString(tagNameCond)
+	args = append(args, opts.Tag)
+	if opts.MinScore != nil {
+		queryBuilder.WriteString(postsScoreCond)
+		args = append(args, *opts.MinScore)
+	}
+	if opts.Random {
+		queryBuilder.WriteString(randCond)
+	}
+	limit := 10
+	if opts.Limit > 0 {
+		limit = opts.Limit
+	}
+	args = append(args, limit)
+	queryBuilder.WriteString(limitCond)
+	queryBuilder.WriteString(taggedPostFinal)
 	var result []TaggedPost
-	if err := db.SelectContext(ctx, &result, query, tag, minScore); err != nil {
-		return nil, fmt.Errorf("find tag %s: %w", tag, err)
+	if err := db.SelectContext(ctx, &result, queryBuilder.String(), args...); err != nil {
+		return nil, fmt.Errorf("find tag %s: %w", opts.Tag, err)
 	}
 	if len(result) == 0 {
-		return nil, fmt.Errorf("tag %s not found", tag)
+		return nil, fmt.Errorf("no results found: %+v", opts)
 	}
 	return result, nil
 }

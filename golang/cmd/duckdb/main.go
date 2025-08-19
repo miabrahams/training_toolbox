@@ -14,7 +14,7 @@ import (
 	_ "github.com/marcboeker/go-duckdb"
 )
 
-func load_config(path string) (*koanf.Koanf, error) {
+func LoadConfig(path string) (*koanf.Koanf, error) {
 	k := koanf.New(".")
 	err := k.Load(file.Provider(path), yaml.Parser())
 	return k, err
@@ -32,7 +32,7 @@ func run_main() error {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)
 
-	k, err := load_config("../config.yml")
+	k, err := LoadConfig("../config.yml")
 	if err != nil {
 		return err
 	}
@@ -42,43 +42,35 @@ func run_main() error {
 		return err
 	}
 	defer db.Close()
+	logger.Info("connected to database", "db_path", k.String("db_path"))
 
-	taggedPost, err := FindTagString(ctx, db, k.String("tag"), k.Int("min_score"))
+	minScore := k.Int("min_score")
+	taggedPosts, err := FindTagString(ctx, db, FindPostsOptions{
+		Tag:      k.String("tag"),
+		MinScore: &minScore,
+		Random:   true,
+	})
 	if err != nil {
 		return fmt.Errorf("find tag string: %w", err)
 	}
-	logger.Info("found tagged post", "post", taggedPost)
+	logger.Info("found tagged posts", "posts", taggedPosts)
 
-	/*
-		logger.Info("connected to database", "db_path", k.String("db_path"))
-		if err := print_table_info(ctx, db, "tag_counts"); err != nil {
-			return fmt.Errorf("print table info: %w", err)
-		}
+	return nil
+}
 
-		if err := print_table_info(ctx, db, "post_tags"); err != nil {
-			return fmt.Errorf("print table info: %w", err)
-		}
-	*/
+func DBDump(ctx context.Context, db *sqlx.DB, logger slog.Logger, k *koanf.Koanf) error {
+	if err := PrintTableInfo(ctx, db, "tag_counts"); err != nil {
+		return fmt.Errorf("print table info: %w", err)
+	}
+
+	if err := PrintTableInfo(ctx, db, "post_tags"); err != nil {
+		return fmt.Errorf("print table info: %w", err)
+	}
 
 	var tables []string
 	if err := db.SelectContext(ctx, &tables, "SHOW TABLES;"); err != nil {
 		return fmt.Errorf("show tables: %w", err)
 	}
 	logger.Info("tables in database", "tables", tables)
-
-	/*
-		var posts []Post
-		if err := db.SelectContext(ctx, &posts, "SELECT * FROM (select * from posts ORDER BY RANDOM()) LIMIT 2"); err != nil {
-			return err
-		}
-
-		for _, post := range posts {
-			logger.Info("row", "value", post)
-		}
-		if err := findPostsWithTag(ctx, db, k.String("tag"), k.Int("min_score")); err != nil {
-			return fmt.Errorf("find posts with tag: %w", err)
-		}
-	*/
-
 	return nil
 }
