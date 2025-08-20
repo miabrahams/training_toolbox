@@ -18,15 +18,26 @@ import (
 	_ "github.com/marcboeker/go-duckdb"
 )
 
+const (
+	comfyUrlConfig              = "comfy.url"
+	generationsBatchCountConfig = "generations.batch_count"
+	generationsPauseTimeConfig  = "generations.pause_time"
+	dbDebugConfig               = "db.debug"
+	dbPathConfig                = "db.path"
+	tagsConfig                  = "search.tags"
+	minScoreConfig              = "search.min_score"
+	logLevelConfig              = "log.level"
+)
+
 func LoadConfig(path string) (*koanf.Koanf, error) {
 	k := koanf.New(".")
 
 	// defaults
 	k.Load(confmap.Provider(map[string]any{
-		"comfy.url":               "http://localhost:8188",
-		"generations.batch_count": 2,
-		"generations.pause_time":  time.Second * 5,
-		"db.debug":                false,
+		comfyUrlConfig:              "http://localhost:8188",
+		generationsBatchCountConfig: 2,
+		generationsPauseTimeConfig:  time.Second * 5,
+		dbDebugConfig:               false,
 	}, "."), nil)
 
 	err := k.Load(file.Provider(path), yaml.Parser())
@@ -52,9 +63,9 @@ func run_main() error {
 		return err
 	}
 
-	if k.String("log.level") != "" {
+	if k.String(logLevelConfig) != "" {
 		levelReader := slog.Level(0)
-		err := levelReader.UnmarshalText([]byte(k.String("log.level")))
+		err := levelReader.UnmarshalText([]byte(k.String(logLevelConfig)))
 		if err != nil {
 			return fmt.Errorf("invalid log level: %w", err)
 		}
@@ -66,9 +77,9 @@ func run_main() error {
 		return fmt.Errorf("load db: %w", err)
 	}
 	defer db.Close()
-	slog.Info("connected to database", "path", k.String("db.path"))
+	slog.Info("connected to database", "path", k.String(dbPathConfig))
 
-	if k.Bool("db.debug") {
+	if k.Bool(dbDebugConfig) {
 		DBDump(ctx, db)
 	}
 
@@ -85,18 +96,18 @@ func run_main() error {
 
 func loadDB(k *koanf.Koanf) (*sqlx.DB, error) {
 	// DuckDB creates a new database if file doesn't exist
-	dbPath := k.String("db.path")
+	dbPath := k.String(dbPathConfig)
 	if _, err := os.Stat(dbPath); err != nil {
-		return nil, fmt.Errorf("error locating database file %s: %w", k.String("db.path"), err)
+		return nil, fmt.Errorf("error locating database file %s: %w", k.String(dbPathConfig), err)
 	}
 
 	return sqlx.Open("duckdb", dbPath+"?access_mode=read_only")
 }
 
 func loadPosts(ctx context.Context, k *koanf.Koanf, db *sqlx.DB) ([]TaggedPost, error) {
-	minScore := k.Int("min_score")
-	taggedPosts, err := FindTagString(ctx, db, FindPostsOptions{
-		Tag:      k.String("tag"),
+	minScore := k.Int(minScoreConfig)
+	taggedPosts, err := FindPostsWithAllTags(ctx, db, FindPostsOptions{
+		Tags:     k.Strings(tagsConfig),
 		MinScore: &minScore,
 		Random:   true,
 	})
@@ -122,9 +133,9 @@ func tagsToPrompt(b *strings.Builder, r *strings.Replacer, tags []string) string
 }
 
 func sendPosts(ctx context.Context, k *koanf.Koanf, posts []TaggedPost) error {
-	comfyURL := k.String("comfy.url")
-	batchCount := k.Int("generations.batch_count")
-	pauseTime := k.Duration("generations.pause_time")
+	comfyURL := k.String(comfyUrlConfig)
+	batchCount := k.Int(generationsBatchCountConfig)
+	pauseTime := k.Duration(generationsPauseTimeConfig)
 
 	client := ComfyAPIClient{
 		BaseURL: comfyURL,

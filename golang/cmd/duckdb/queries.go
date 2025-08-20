@@ -77,19 +77,28 @@ var (
 )
 
 type FindPostsOptions struct {
-	Tag      string
-	MinScore *int
-	Count    int
-	Limit    int
-	Random   bool
+	Tags        []string
+	ExcludeTags []string
+	MinScore    *int
+	Count       int
+	Limit       int
+	Random      bool
 }
 
-func FindPostsWithTag(ctx context.Context, db *sqlx.DB, opts FindPostsOptions) ([]Post, error) {
+func FindPosts(ctx context.Context, db *sqlx.DB, opts FindPostsOptions) ([]Post, error) {
 	queryBuilder := strings.Builder{}
 	queryBuilder.WriteString(postsQueryHeader)
 	args := make([]any, 0, 3)
-	queryBuilder.WriteString(tagNameCond)
-	args = append(args, opts.Tag)
+	if len(opts.Tags) > 0 {
+		tag := opts.Tags[0]
+		queryBuilder.WriteString(tagNameCond)
+		args = append(args, tag)
+		var count []int64
+		if err := db.SelectContext(ctx, &count, countQuery, tag, opts.MinScore); err != nil {
+			return nil, fmt.Errorf("count posts %+v: %w", opts, err)
+		}
+		slog.Info("count of posts with tag", "tag", tag, "count", count)
+	}
 	if opts.MinScore != nil {
 		queryBuilder.WriteString(postsScoreCond)
 		args = append(args, *opts.MinScore)
@@ -106,21 +115,14 @@ func FindPostsWithTag(ctx context.Context, db *sqlx.DB, opts FindPostsOptions) (
 
 	var posts []Post
 	if err := db.SelectContext(ctx, &posts, queryBuilder.String(), args...); err != nil {
-		return nil, fmt.Errorf("find posts with tag %s: %w", opts.Tag, err)
+		return nil, fmt.Errorf("find posts %v: %w", opts, err)
 	}
-
-	var count []int64
-	if err := db.SelectContext(ctx, &count, countQuery, opts.Tag, opts.MinScore); err != nil {
-		return nil, fmt.Errorf("count posts with tag %s: %w", opts.Tag, err)
-	}
-	slog.Info("count of posts with tag", "tag", opts.Tag, "count", count)
 	return posts, nil
 }
 
 /* Example query:
-query := `
-select p.*, t.tags FROM
-(
+
+SelectPostsQuery
 	SELECT p.*
 	FROM posts p
 	JOIN post_tags pt ON p.id = pt.post_id
@@ -188,15 +190,20 @@ type TaggedPost struct {
 	Tags StringSlice `db:"tags"`
 }
 
-// FindTagString searches the database for posts matching the given conditions.
+// FindPostsWithTag searches the database for posts matching the given conditions.
 // Each post is returned with an array of tags in string format.
-func FindTagString(ctx context.Context, db *sqlx.DB, opts FindPostsOptions) ([]TaggedPost, error) {
+func FindPostsWithTag(ctx context.Context, db *sqlx.DB, opts FindPostsOptions) ([]TaggedPost, error) {
+	if len(opts.Tags) == 0 {
+		return nil, fmt.Errorf("no tags provided in options: %v", opts)
+	}
+	tag := opts.Tags[0]
+
 	queryBuilder := strings.Builder{}
 	args := make([]any, 0, 3)
 	queryBuilder.WriteString(taggedPostHeader)
 	queryBuilder.WriteString(taggedPostPostHeader)
 	queryBuilder.WriteString(tagNameCond)
-	args = append(args, opts.Tag)
+	args = append(args, tag)
 	if opts.MinScore != nil {
 		queryBuilder.WriteString(postsScoreCond)
 		args = append(args, *opts.MinScore)
@@ -214,11 +221,76 @@ func FindTagString(ctx context.Context, db *sqlx.DB, opts FindPostsOptions) ([]T
 	var result []TaggedPost
 	q := queryBuilder.String()
 	if err := db.SelectContext(ctx, &result, q, args...); err != nil {
-		return nil, fmt.Errorf("find tag %s: %w", opts.Tag, err)
+		return nil, fmt.Errorf("find tag %s: %w", tag, err)
 	}
-	if len(result) == 0 {
-		return nil, fmt.Errorf("no results found: %+v", opts)
+	return result, nil
+}
+
+// FindPostsWithAllTags implements an intersection search.
+func FindPostsWithAllTags(ctx context.Context, db *sqlx.DB, opts FindPostsOptions) ([]TaggedPost, error) {
+	if len(opts.Tags) == 0 {
+		return nil, fmt.Errorf("no tags provided in options: %v", opts)
 	}
+
+	args := []any{opts.Tags}
+
+	// Build min score clause
+	scoreClause := ""
+	if opts.MinScore != nil {
+		scoreClause = "AND p.score > ?"
+		args = append(args, *opts.MinScore)
+	}
+
+	args = append(args, len(opts.Tags))
+
+	orderClause := ""
+	if opts.Random {
+		orderClause = "ORDER BY random()"
+	}
+
+	limitClause := ""
+	if opts.Limit > 0 {
+		limitClause = "LIMIT ?"
+		args = append(args, opts.Limit)
+	}
+
+	query := fmt.Sprintf(`
+	SELECT p.*, t.tags
+	FROM (
+		SELECT p.*
+		FROM posts p
+		JOIN post_tags pt ON p.id = pt.post_id
+		JOIN tags t ON pt.tag_id = t.tag_id
+		WHERE t.name IN (?)
+		%s
+		GROUP BY p.id, p.created_at, p.rating, p.image_width, p.image_height,
+				p.fav_count, p.file_ext, p.is_deleted, p.score, p.up_score, p.down_score
+		HAVING COUNT(DISTINCT t.name) = ?
+		%s
+		%s
+	) p
+	 JOIN (
+		SELECT pt.post_id, array_agg(tg.name) as tags
+		FROM post_tags pt
+		JOIN tags tg ON pt.tag_id = tg.tag_id
+		GROUP BY pt.post_id
+	) t
+	ON p.id = t.post_id
+	`,
+		scoreClause, orderClause, limitClause)
+
+	query, args, err := sqlx.In(query, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	var result []TaggedPost
+	fmt.Println("Query:", query)
+	fmt.Println("Args:", args)
+	if err := db.SelectContext(ctx, &result, query, args...); err != nil {
+		return nil, fmt.Errorf("query: %w", err)
+	}
+
 	return result, nil
 }
 
@@ -254,6 +326,10 @@ func PrintTableInfo(ctx context.Context, db *sqlx.DB, table string) error {
 }
 
 func DBDump(ctx context.Context, db *sqlx.DB) error {
+	if err := PrintTableInfo(ctx, db, "posts"); err != nil {
+		return fmt.Errorf("print table info: %w", err)
+	}
+
 	if err := PrintTableInfo(ctx, db, "tag_counts"); err != nil {
 		return fmt.Errorf("print table info: %w", err)
 	}
