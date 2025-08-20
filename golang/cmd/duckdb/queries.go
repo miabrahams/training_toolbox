@@ -193,7 +193,8 @@ func FindTagString(ctx context.Context, db *sqlx.DB, opts FindPostsOptions) ([]T
 	queryBuilder.WriteString(limitCond)
 	queryBuilder.WriteString(taggedPostFinal)
 	var result []TaggedPost
-	if err := db.SelectContext(ctx, &result, queryBuilder.String(), args...); err != nil {
+	q := queryBuilder.String()
+	if err := db.SelectContext(ctx, &result, q, args...); err != nil {
 		return nil, fmt.Errorf("find tag %s: %w", opts.Tag, err)
 	}
 	if len(result) == 0 {
