@@ -19,27 +19,28 @@ import (
 )
 
 const (
-	comfyUrlConfig              = "comfy.url"
-	generationsBatchCountConfig = "generations.batch_count"
-	generationsPauseTimeConfig  = "generations.pause_time"
-	prefixConfig                = "generations.prefix"
-	dbDebugConfig               = "db.debug"
-	dbPathConfig                = "db.path"
-	tagsConfig                  = "search.tags"
-	excludeTagsConfig           = "search.exclude_tags"
-	minScoreConfig              = "search.min_score"
-	limitConfig                 = "search.limit"
-	logLevelConfig              = "log.level"
+	comfyUrlConfig      = "comfy.url"
+	genBatchCountConfig = "generations.batch_count"
+	genPauseTimeConfig  = "generations.pause_time"
+	prefixConfig        = "generations.prefix"
+	genStripTagsConfig  = "search.strip_tags"
+	dbDebugConfig       = "db.debug"
+	dbPathConfig        = "db.path"
+	tagsConfig          = "search.tags"
+	excludeTagsConfig   = "search.exclude_tags"
+	minScoreConfig      = "search.min_score"
+	limitConfig         = "search.limit"
+	logLevelConfig      = "log.level"
 )
 
 func LoadConfig(path string) (*koanf.Koanf, error) {
 	k := koanf.New(".")
 
 	defaults := map[string]any{
-		comfyUrlConfig:              "http://localhost:8188",
-		generationsBatchCountConfig: 2,
-		generationsPauseTimeConfig:  time.Second * 5,
-		dbDebugConfig:               false,
+		comfyUrlConfig:      "http://localhost:8188",
+		genBatchCountConfig: 2,
+		genPauseTimeConfig:  time.Second * 5,
+		dbDebugConfig:       false,
 	}
 
 	k.Load(confmap.Provider(defaults, "."), nil)
@@ -124,25 +125,29 @@ func loadPosts(ctx context.Context, k *koanf.Koanf, db *sqlx.DB) ([]TaggedPost, 
 	return taggedPosts, nil
 }
 
-func tagsToPrompt(b *strings.Builder, r *strings.Replacer, tags []string) string {
+func tagsToPrompt(b *strings.Builder, r *strings.Replacer, tags []string, stripTags map[string]struct{}) {
 	rand.Shuffle(len(tags), func(i int, j int) {
 		tags[i], tags[j] = tags[j], tags[i]
 	})
 
+	wroteTag := false
 	for i, tag := range tags {
-		tag = strings.ReplaceAll(tag, "_", " ")
-		b.WriteString(r.Replace(tag))
-		if i < len(tags)-1 {
+		if (i > 0) && wroteTag {
 			b.WriteString(", ")
 		}
+		if _, ok := stripTags[tag]; ok {
+			continue
+		}
+		tag = strings.ReplaceAll(tag, "_", " ")
+		b.WriteString(r.Replace(tag))
+		wroteTag = true
 	}
-	return b.String()
 }
 
 func sendPosts(ctx context.Context, k *koanf.Koanf, posts []TaggedPost) error {
 	comfyURL := k.String(comfyUrlConfig)
-	batchCount := k.Int(generationsBatchCountConfig)
-	pauseTime := k.Duration(generationsPauseTimeConfig)
+	batchCount := k.Int(genBatchCountConfig)
+	pauseTime := k.Duration(genPauseTimeConfig)
 
 	client := ComfyAPIClient{
 		BaseURL: comfyURL,
@@ -151,11 +156,26 @@ func sendPosts(ctx context.Context, k *koanf.Koanf, posts []TaggedPost) error {
 
 	b := strings.Builder{}
 	r := strings.NewReplacer("_", " ", "(", "\\(", ")", "\\)")
+	stripTags := make(map[string]struct{}, len(k.Strings(genStripTagsConfig)))
+	for _, tag := range k.Strings(genStripTagsConfig) {
+		stripTags[tag] = struct{}{}
+	}
 
 	for i, post := range posts {
 		slog.Info("processing post", "index", i, "post", post.ID)
+
+		// Build prompt
 		b.Grow(2048)
-		prompt := tagsToPrompt(&b, r, post.Tags)
+		if prefix := k.String(prefixConfig); prefix != "" {
+			b.WriteString(prefix)
+			b.WriteString(", ")
+		}
+		tagsToPrompt(&b, r, post.Tags, stripTags)
+		if postfix := k.String("generations.postfix"); postfix != "" {
+			b.WriteString(", ")
+			b.WriteString(postfix)
+		}
+		prompt := b.String()
 		b.Reset()
 
 		slog.Info("sending promptReplace", "prompt", prompt, "width", post.ImageWidth, "height", post.ImageHeight)
