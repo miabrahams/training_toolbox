@@ -32,13 +32,14 @@ const (
 func LoadConfig(path string) (*koanf.Koanf, error) {
 	k := koanf.New(".")
 
-	// defaults
-	k.Load(confmap.Provider(map[string]any{
+	defaults := map[string]any{
 		comfyUrlConfig:              "http://localhost:8188",
 		generationsBatchCountConfig: 2,
 		generationsPauseTimeConfig:  time.Second * 5,
 		dbDebugConfig:               false,
-	}, "."), nil)
+	}
+
+	k.Load(confmap.Provider(defaults, "."), nil)
 
 	err := k.Load(file.Provider(path), yaml.Parser())
 	return k, err
@@ -50,6 +51,7 @@ func main() {
 		os.Exit(1)
 	}
 }
+
 func run_main() error {
 	ctx := context.Background()
 	level := slog.LevelVar{}
