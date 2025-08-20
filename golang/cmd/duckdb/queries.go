@@ -233,3 +233,20 @@ func PrintTableInfo(ctx context.Context, db *sqlx.DB, table string) error {
 	slog.Info("table_info", "columns", b.String())
 	return nil
 }
+
+func DBDump(ctx context.Context, db *sqlx.DB) error {
+	if err := PrintTableInfo(ctx, db, "tag_counts"); err != nil {
+		return fmt.Errorf("print table info: %w", err)
+	}
+
+	if err := PrintTableInfo(ctx, db, "post_tags"); err != nil {
+		return fmt.Errorf("print table info: %w", err)
+	}
+
+	var tables []string
+	if err := db.SelectContext(ctx, &tables, "SHOW TABLES;"); err != nil {
+		return fmt.Errorf("show tables: %w", err)
+	}
+	slog.Info("tables in database", "tables", tables)
+	return nil
+}

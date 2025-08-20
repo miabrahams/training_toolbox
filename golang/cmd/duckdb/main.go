@@ -38,10 +38,12 @@ func main() {
 		os.Exit(1)
 	}
 }
-
 func run_main() error {
 	ctx := context.Background()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	level := slog.LevelVar{}
+	logger := slog.New(
+		slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: &level}),
+	)
 	slog.SetDefault(logger)
 
 	k, err := LoadConfig("../config.yml")
@@ -49,19 +51,44 @@ func run_main() error {
 		return err
 	}
 
+	if k.String("log.level") != "" {
+		levelReader := slog.Level(0)
+		err := levelReader.UnmarshalText([]byte(k.String("log.level")))
+		if err != nil {
+			return fmt.Errorf("invalid log level: %w", err)
+		}
+		level.Set(levelReader)
+	}
+
+	db, err := loadDB(k)
+	if err != nil {
+		return fmt.Errorf("load db: %w", err)
+	}
+	defer db.Close()
+	slog.Info("connected to database", "path", k.String("db.path"))
+
+	posts, err := loadPosts(ctx, k, db)
+	if err != nil {
+		return fmt.Errorf("load posts: %w", err)
+	}
+
+	if err := sendPosts(ctx, k, posts); err != nil {
+		return fmt.Errorf("send posts: %w", err)
+	}
+	return nil
+}
+
+func loadDB(k *koanf.Koanf) (*sqlx.DB, error) {
 	// DuckDB creates a new database if file doesn't exist
 	dbPath := k.String("db.path")
 	if _, err := os.Stat(dbPath); err != nil {
-		return fmt.Errorf("error locating database file %s: %w", k.String("db.path"), err)
+		return nil, fmt.Errorf("error locating database file %s: %w", k.String("db.path"), err)
 	}
 
-	db, err := sqlx.Open("duckdb", dbPath+"?access_mode=read_only")
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-	logger.Info("connected to database", "path", k.String("db.path"))
+	return sqlx.Open("duckdb", dbPath+"?access_mode=read_only")
+}
 
+func loadPosts(ctx context.Context, k *koanf.Koanf, db *sqlx.DB) ([]TaggedPost, error) {
 	minScore := k.Int("min_score")
 	taggedPosts, err := FindTagString(ctx, db, FindPostsOptions{
 		Tag:      k.String("tag"),
@@ -69,9 +96,12 @@ func run_main() error {
 		Random:   true,
 	})
 	if err != nil {
-		return fmt.Errorf("find tag string: %w", err)
+		return nil, fmt.Errorf("find tag string: %w", err)
 	}
+	return taggedPosts, nil
+}
 
+func sendPosts(ctx context.Context, k *koanf.Koanf, posts []TaggedPost) error {
 	comfyURL := k.String("comfy.url")
 	batchCount := k.Int("generations.batch_count")
 	pauseTime := k.Duration("generations.pause_time")
@@ -81,8 +111,8 @@ func run_main() error {
 	}
 	client.Init()
 
-	for i, post := range taggedPosts {
-		logger.Info("processing post", "index", i, "post", post.ID)
+	for i, post := range posts {
+		slog.Info("processing post", "index", i, "post", post.ID)
 		rand.Shuffle(len(post.Tags), func(i int, j int) {
 			post.Tags[i], post.Tags[j] = post.Tags[j], post.Tags[i]
 		})
@@ -98,40 +128,31 @@ func run_main() error {
 		}
 		prompt := strings.Join(strTags, ", ")
 
-		logger.Info("sending promptReplace", "prompt", prompt, "width", post.ImageWidth, "height", post.ImageHeight)
+		slog.Info("sending promptReplace", "prompt", prompt, "width", post.ImageWidth, "height", post.ImageHeight)
 		if err := client.SendPromptReplace(ctx, prompt, post.ImageWidth, post.ImageHeight); err != nil {
-			logger.Error("promptReplace failed", "error", err)
+			slog.Error("promptReplace failed", "error", err)
 			continue
 		}
-		time.Sleep(pauseTime / 2.0)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(pauseTime / 2.0):
+		}
 
-		logger.Info("sending generateImages", "count", batchCount)
+		slog.Info("sending generateImages", "count", batchCount)
 		if err := client.SendGenerate(ctx, batchCount); err != nil {
-			logger.Error("sendGenerateImages failed", "error", err)
+			slog.Error("sendGenerateImages failed", "error", err)
 			continue
 		}
 
-		if i < len(taggedPosts)-1 {
-			logger.Info("waiting for next post generation")
-			time.Sleep(pauseTime)
+		if i < len(posts)-1 {
+			slog.Info("waiting...")
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(pauseTime):
+			}
 		}
 	}
-	return nil
-}
-
-func DBDump(ctx context.Context, db *sqlx.DB, logger slog.Logger, k *koanf.Koanf) error {
-	if err := PrintTableInfo(ctx, db, "tag_counts"); err != nil {
-		return fmt.Errorf("print table info: %w", err)
-	}
-
-	if err := PrintTableInfo(ctx, db, "post_tags"); err != nil {
-		return fmt.Errorf("print table info: %w", err)
-	}
-
-	var tables []string
-	if err := db.SelectContext(ctx, &tables, "SHOW TABLES;"); err != nil {
-		return fmt.Errorf("show tables: %w", err)
-	}
-	logger.Info("tables in database", "tables", tables)
 	return nil
 }
