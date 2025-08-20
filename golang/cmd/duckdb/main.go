@@ -106,6 +106,21 @@ func loadPosts(ctx context.Context, k *koanf.Koanf, db *sqlx.DB) ([]TaggedPost, 
 	return taggedPosts, nil
 }
 
+func tagsToPrompt(b *strings.Builder, r *strings.Replacer, tags []string) string {
+	rand.Shuffle(len(tags), func(i int, j int) {
+		tags[i], tags[j] = tags[j], tags[i]
+	})
+
+	for i, tag := range tags {
+		tag = strings.ReplaceAll(tag, "_", " ")
+		b.WriteString(r.Replace(tag))
+		if i < len(tags)-1 {
+			b.WriteString(", ")
+		}
+	}
+	return b.String()
+}
+
 func sendPosts(ctx context.Context, k *koanf.Koanf, posts []TaggedPost) error {
 	comfyURL := k.String("comfy.url")
 	batchCount := k.Int("generations.batch_count")
@@ -116,24 +131,14 @@ func sendPosts(ctx context.Context, k *koanf.Koanf, posts []TaggedPost) error {
 	}
 	client.Init()
 
+	b := strings.Builder{}
+	r := strings.NewReplacer("_", " ", "(", "\\(", ")", "\\)")
+
 	for i, post := range posts {
 		slog.Info("processing post", "index", i, "post", post.ID)
-		rand.Shuffle(len(post.Tags), func(i int, j int) {
-			post.Tags[i], post.Tags[j] = post.Tags[j], post.Tags[i]
-		})
-
-		// TODO: see about this type conversion
-		/*
-			strTags := make([]string, 0, len(post.Tags))
-			for _, i := range post.Tags {
-				if tag, ok := i.(string); ok {
-					strTags = append(strTags, tag)
-				} else {
-					return fmt.Errorf("tag is not a string %T", tag)
-				}
-			}
-		*/
-		prompt := strings.Join(post.Tags, ", ")
+		b.Grow(2048)
+		prompt := tagsToPrompt(&b, r, post.Tags)
+		b.Reset()
 
 		slog.Info("sending promptReplace", "prompt", prompt, "width", post.ImageWidth, "height", post.ImageHeight)
 		if err := client.SendPromptReplace(ctx, prompt, post.ImageWidth, post.ImageHeight); err != nil {
