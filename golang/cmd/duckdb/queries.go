@@ -85,7 +85,6 @@ type FindPostsOptions struct {
 }
 
 func FindPostsWithTag(ctx context.Context, db *sqlx.DB, opts FindPostsOptions) ([]Post, error) {
-
 	queryBuilder := strings.Builder{}
 	queryBuilder.WriteString(postsQueryHeader)
 	args := make([]any, 0, 3)
@@ -164,9 +163,29 @@ var (
 	`
 )
 
+// DuckDB returns []any for an array_agg return type. Unmarshal to []string using a custom type.
+type StringSlice []string
+
+func (s *StringSlice) Scan(src any) error {
+	switch v := src.(type) {
+	case []any:
+		*s = make(StringSlice, len(v))
+		for i, val := range v {
+			str, ok := val.(string)
+			if !ok {
+				return fmt.Errorf("element %d is not a string: %T", i, val)
+			}
+			(*s)[i] = str
+		}
+		return nil
+	default:
+		return fmt.Errorf("unsupported type for StringSlice: %T", src)
+	}
+}
+
 type TaggedPost struct {
 	Post
-	Tags []any `db:"tags"`
+	Tags StringSlice `db:"tags"`
 }
 
 // FindTagString searches the database for posts matching the given conditions.

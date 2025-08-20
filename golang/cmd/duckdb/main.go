@@ -26,6 +26,7 @@ func LoadConfig(path string) (*koanf.Koanf, error) {
 		"comfy.url":               "http://localhost:8188",
 		"generations.batch_count": 2,
 		"generations.pause_time":  time.Second * 5,
+		"db.debug":                false,
 	}, "."), nil)
 
 	err := k.Load(file.Provider(path), yaml.Parser())
@@ -66,6 +67,10 @@ func run_main() error {
 	}
 	defer db.Close()
 	slog.Info("connected to database", "path", k.String("db.path"))
+
+	if k.Bool("db.debug") {
+		DBDump(ctx, db)
+	}
 
 	posts, err := loadPosts(ctx, k, db)
 	if err != nil {
@@ -118,15 +123,17 @@ func sendPosts(ctx context.Context, k *koanf.Koanf, posts []TaggedPost) error {
 		})
 
 		// TODO: see about this type conversion
-		strTags := make([]string, 0, len(post.Tags))
-		for _, i := range post.Tags {
-			if tag, ok := i.(string); ok {
-				strTags = append(strTags, tag)
-			} else {
-				return fmt.Errorf("tag is not a string %T", tag)
+		/*
+			strTags := make([]string, 0, len(post.Tags))
+			for _, i := range post.Tags {
+				if tag, ok := i.(string); ok {
+					strTags = append(strTags, tag)
+				} else {
+					return fmt.Errorf("tag is not a string %T", tag)
+				}
 			}
-		}
-		prompt := strings.Join(strTags, ", ")
+		*/
+		prompt := strings.Join(post.Tags, ", ")
 
 		slog.Info("sending promptReplace", "prompt", prompt, "width", post.ImageWidth, "height", post.ImageHeight)
 		if err := client.SendPromptReplace(ctx, prompt, post.ImageWidth, post.ImageHeight); err != nil {
