@@ -80,7 +80,6 @@ type FindPostsOptions struct {
 	Tags        []string
 	ExcludeTags []string
 	MinScore    *int
-	Count       int
 	Limit       int
 	Random      bool
 }
@@ -234,27 +233,42 @@ func FindPostsWithAllTags(ctx context.Context, db *sqlx.DB, opts FindPostsOption
 
 	args := []any{opts.Tags}
 
-	// Build min score clause
-	scoreClause := ""
+	// exclude tags clause
+	andDoesNotHaveTags := ""
+	if len(opts.ExcludeTags) > 0 {
+		andDoesNotHaveTags = `
+			AND p.id NOT IN (
+				SELECT pt2.post_id
+				FROM post_tags pt2
+				JOIN tags t2 ON pt2.tag_id = t2.tag_id
+				WHERE t2.name IN (?)
+			)`
+		args = append(args, opts.ExcludeTags)
+	}
+
+	// min score clause
+	andScoreGreaterThan := ""
 	if opts.MinScore != nil {
-		scoreClause = "AND p.score > ?"
+		andScoreGreaterThan = "AND p.score > ?"
 		args = append(args, *opts.MinScore)
 	}
 
 	args = append(args, len(opts.Tags))
 
-	orderClause := ""
+	orderBy := ""
 	if opts.Random {
-		orderClause = "ORDER BY random()"
+		orderBy = "ORDER BY random()"
 	}
 
-	limitClause := ""
+	limit := 10
 	if opts.Limit > 0 {
-		limitClause = "LIMIT ?"
-		args = append(args, opts.Limit)
+		limit = opts.Limit
 	}
+	args = append(args, limit)
 
-	query := fmt.Sprintf(`
+	builder := strings.Builder{}
+	bws := func(s string) { builder.WriteString(s) }
+	bws(`
 	SELECT p.*, t.tags
 	FROM (
 		SELECT p.*
@@ -262,12 +276,17 @@ func FindPostsWithAllTags(ctx context.Context, db *sqlx.DB, opts FindPostsOption
 		JOIN post_tags pt ON p.id = pt.post_id
 		JOIN tags t ON pt.tag_id = t.tag_id
 		WHERE t.name IN (?)
-		%s
+		`)
+	bws(andDoesNotHaveTags)
+	bws(andScoreGreaterThan)
+	bws(`
 		GROUP BY p.id, p.created_at, p.rating, p.image_width, p.image_height,
 				p.fav_count, p.file_ext, p.is_deleted, p.score, p.up_score, p.down_score
 		HAVING COUNT(DISTINCT t.name) = ?
-		%s
-		%s
+		`)
+	bws(orderBy)
+	bws(`
+		LIMIT ?
 	) p
 	 JOIN (
 		SELECT pt.post_id, array_agg(tg.name) as tags
@@ -276,10 +295,9 @@ func FindPostsWithAllTags(ctx context.Context, db *sqlx.DB, opts FindPostsOption
 		GROUP BY pt.post_id
 	) t
 	ON p.id = t.post_id
-	`,
-		scoreClause, orderClause, limitClause)
+	`)
 
-	query, args, err := sqlx.In(query, args...)
+	query, args, err := sqlx.In(builder.String(), args...)
 	if err != nil {
 		return nil, err
 	}

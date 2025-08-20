@@ -22,10 +22,13 @@ const (
 	comfyUrlConfig              = "comfy.url"
 	generationsBatchCountConfig = "generations.batch_count"
 	generationsPauseTimeConfig  = "generations.pause_time"
+	prefixConfig                = "generations.prefix"
 	dbDebugConfig               = "db.debug"
 	dbPathConfig                = "db.path"
 	tagsConfig                  = "search.tags"
+	excludeTagsConfig           = "search.exclude_tags"
 	minScoreConfig              = "search.min_score"
+	limitConfig                 = "search.limit"
 	logLevelConfig              = "log.level"
 )
 
@@ -109,9 +112,11 @@ func loadDB(k *koanf.Koanf) (*sqlx.DB, error) {
 func loadPosts(ctx context.Context, k *koanf.Koanf, db *sqlx.DB) ([]TaggedPost, error) {
 	minScore := k.Int(minScoreConfig)
 	taggedPosts, err := FindPostsWithAllTags(ctx, db, FindPostsOptions{
-		Tags:     k.Strings(tagsConfig),
-		MinScore: &minScore,
-		Random:   true,
+		Tags:        k.Strings(tagsConfig),
+		ExcludeTags: k.Strings(excludeTagsConfig),
+		MinScore:    &minScore,
+		Random:      true,
+		Limit:       k.Int(limitConfig),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("find tag string: %w", err)
