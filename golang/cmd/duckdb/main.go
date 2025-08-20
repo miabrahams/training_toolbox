@@ -144,6 +144,8 @@ func tagsToPrompt(b *strings.Builder, r *strings.Replacer, tags []string, stripT
 	}
 }
 
+const bufferLength = 2048
+
 func sendPosts(ctx context.Context, k *koanf.Koanf, posts []TaggedPost) error {
 	comfyURL := k.String(comfyUrlConfig)
 	batchCount := k.Int(genBatchCountConfig)
@@ -161,11 +163,13 @@ func sendPosts(ctx context.Context, k *koanf.Koanf, posts []TaggedPost) error {
 		stripTags[tag] = struct{}{}
 	}
 
+	numTooLong := 0
+
 	for i, post := range posts {
 		slog.Info("processing post", "index", i, "post", post.ID)
 
 		// Build prompt
-		b.Grow(2048)
+		b.Grow(bufferLength)
 		if prefix := k.String(prefixConfig); prefix != "" {
 			b.WriteString(prefix)
 			b.WriteString(", ")
@@ -175,6 +179,10 @@ func sendPosts(ctx context.Context, k *koanf.Koanf, posts []TaggedPost) error {
 			b.WriteString(", ")
 			b.WriteString(postfix)
 		}
+		if b.Len() > bufferLength {
+			numTooLong++
+		}
+
 		prompt := b.String()
 		b.Reset()
 
@@ -203,6 +211,9 @@ func sendPosts(ctx context.Context, k *koanf.Koanf, posts []TaggedPost) error {
 			case <-time.After(pauseTime):
 			}
 		}
+	}
+	if numTooLong > 0 {
+		slog.Warn("some prompts were too long", "count", numTooLong)
 	}
 	return nil
 }

@@ -238,11 +238,11 @@ func FindPostsWithAllTags(ctx context.Context, db *sqlx.DB, opts FindPostsOption
 	if len(opts.ExcludeTags) > 0 {
 		andDoesNotHaveTags = `
 			AND p.id NOT IN (
-				SELECT pt2.post_id
-				FROM post_tags pt2
-				JOIN tags t2 ON pt2.tag_id = t2.tag_id
-				WHERE t2.name IN (?)
-			)`
+			SELECT pt2.post_id
+			FROM post_tags pt2
+			JOIN tags t2 ON pt2.tag_id = t2.tag_id
+			WHERE t2.name IN (?)
+		)`
 		args = append(args, opts.ExcludeTags)
 	}
 
@@ -275,8 +275,7 @@ func FindPostsWithAllTags(ctx context.Context, db *sqlx.DB, opts FindPostsOption
 		FROM posts p
 		JOIN post_tags pt ON p.id = pt.post_id
 		JOIN tags t ON pt.tag_id = t.tag_id
-		WHERE t.name IN (?)
-		`)
+		WHERE t.name IN (?)`)
 	bws(andDoesNotHaveTags)
 	bws(andScoreGreaterThan)
 	bws(`
@@ -294,8 +293,7 @@ func FindPostsWithAllTags(ctx context.Context, db *sqlx.DB, opts FindPostsOption
 		JOIN tags tg ON pt.tag_id = tg.tag_id
 		GROUP BY pt.post_id
 	) t
-	ON p.id = t.post_id
-	`)
+	ON p.id = t.post_id`)
 
 	query, args, err := sqlx.In(builder.String(), args...)
 	if err != nil {
