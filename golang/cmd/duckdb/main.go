@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -29,6 +30,7 @@ const (
 	tagsConfig          = "search.tags"
 	excludeTagsConfig   = "search.exclude_tags"
 	minScoreConfig      = "search.min_score"
+	minFavsConfig       = "search.min_favs"
 	limitConfig         = "search.limit"
 	logLevelConfig      = "log.level"
 )
@@ -111,11 +113,21 @@ func loadDB(k *koanf.Koanf) (*sqlx.DB, error) {
 }
 
 func loadPosts(ctx context.Context, k *koanf.Koanf, db *sqlx.DB) ([]TaggedPost, error) {
-	minScore := k.Int(minScoreConfig)
+	var minScore *int
+	if k.Exists(minScoreConfig) {
+		val := k.Int(minScoreConfig)
+		minScore = &val
+	}
+	var minFavs *int
+	if k.Exists(minFavsConfig) {
+		val := k.Int(minFavsConfig)
+		minFavs = &val
+	}
 	taggedPosts, err := FindPostsWithAllTags(ctx, db, FindPostsOptions{
 		Tags:        k.Strings(tagsConfig),
 		ExcludeTags: k.Strings(excludeTagsConfig),
-		MinScore:    &minScore,
+		MinScore:    minScore,
+		MinFavs:     minFavs,
 		Random:      true,
 		Limit:       k.Int(limitConfig),
 	})
@@ -125,10 +137,15 @@ func loadPosts(ctx context.Context, k *koanf.Koanf, db *sqlx.DB) ([]TaggedPost, 
 	return taggedPosts, nil
 }
 
-func tagsToPrompt(b *strings.Builder, r *strings.Replacer, tags []string, stripTags map[string]struct{}) {
+func tagsToPrompt(b *strings.Builder, r *strings.Replacer, post TaggedPost, stripTags map[string]struct{}) {
+	tags := slices.Clone(post.Tags)
+	tagcats := slices.Clone(post.TagCategory)
 	rand.Shuffle(len(tags), func(i int, j int) {
 		tags[i], tags[j] = tags[j], tags[i]
+		tagcats[i], tagcats[j] = tagcats[j], tagcats[i]
 	})
+	fmt.Println("tags:", tags)
+	fmt.Println("tagcats:", tagcats)
 
 	wroteTag := false
 	for i, tag := range tags {
@@ -174,7 +191,7 @@ func sendPosts(ctx context.Context, k *koanf.Koanf, posts []TaggedPost) error {
 			b.WriteString(prefix)
 			b.WriteString(", ")
 		}
-		tagsToPrompt(&b, r, post.Tags, stripTags)
+		tagsToPrompt(&b, r, post, stripTags)
 		if postfix := k.String("generations.postfix"); postfix != "" {
 			b.WriteString(", ")
 			b.WriteString(postfix)

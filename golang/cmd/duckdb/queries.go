@@ -14,6 +14,8 @@ import (
 	_ "github.com/marcboeker/go-duckdb"
 )
 
+// TODO: Rating
+
 // Database models
 type Post struct {
 	ID          int64     `db:"id"`
@@ -33,6 +35,24 @@ type Tag struct {
 	TagID    int64  `db:"tag_id"`
 	Name     string `db:"name"`
 	Category string `db:"category"`
+}
+
+var Categories = []string{
+	0: "general",     // most tags
+	1: "artist",      // ok
+	2: "contributor", // eg. modeler of an asset, not cg artist
+	3: "copyright",   // eg "nintendo"
+	4: "character",   // ok
+	5: "species",     // ok
+	6: "lore",        // rare
+	7: "meta",        // ok
+	8: "invalid",     // ok
+}
+
+var Ratings = []map[string]string{
+	{"g": "general"},
+	{"q": "questionable"},
+	{"e": "explicit"},
 }
 
 type TagCount struct {
@@ -80,6 +100,8 @@ type FindPostsOptions struct {
 	Tags        []string
 	ExcludeTags []string
 	MinScore    *int
+	MinFavs     *int
+	MinUpScore  *int
 	Limit       int
 	Random      bool
 }
@@ -184,9 +206,29 @@ func (s *StringSlice) Scan(src any) error {
 	}
 }
 
+type Int32Slice []int32
+
+func (s *Int32Slice) Scan(src any) error {
+	switch v := src.(type) {
+	case []any:
+		*s = make(Int32Slice, len(v))
+		for i, val := range v {
+			num, ok := val.(int32)
+			if !ok {
+				return fmt.Errorf("element %d is not an int: %T", i, val)
+			}
+			(*s)[i] = num
+		}
+		return nil
+	default:
+		return fmt.Errorf("unsupported type for IntSlice: %T", src)
+	}
+}
+
 type TaggedPost struct {
 	Post
-	Tags StringSlice `db:"tags"`
+	Tags        StringSlice `db:"tags"`
+	TagCategory Int32Slice  `db:"categories"`
 }
 
 // FindPostsWithTag searches the database for posts matching the given conditions.
@@ -233,7 +275,7 @@ func FindPostsWithAllTags(ctx context.Context, db *sqlx.DB, opts FindPostsOption
 
 	args := []any{opts.Tags}
 
-	// exclude tags clause
+	// build interstitial clauses
 	andDoesNotHaveTags := ""
 	if len(opts.ExcludeTags) > 0 {
 		andDoesNotHaveTags = `
@@ -246,11 +288,16 @@ func FindPostsWithAllTags(ctx context.Context, db *sqlx.DB, opts FindPostsOption
 		args = append(args, opts.ExcludeTags)
 	}
 
-	// min score clause
 	andScoreGreaterThan := ""
 	if opts.MinScore != nil {
 		andScoreGreaterThan = "AND p.score > ?"
 		args = append(args, *opts.MinScore)
+	}
+
+	andFavsGreaterThan := ""
+	if opts.MinFavs != nil {
+		andFavsGreaterThan = "AND p.fav_count > ?"
+		args = append(args, *opts.MinFavs)
 	}
 
 	args = append(args, len(opts.Tags))
@@ -269,7 +316,7 @@ func FindPostsWithAllTags(ctx context.Context, db *sqlx.DB, opts FindPostsOption
 	builder := strings.Builder{}
 	bws := func(s string) { builder.WriteString(s) }
 	bws(`
-	SELECT p.*, t.tags
+	SELECT p.*, t.tags, t.categories
 	FROM (
 		SELECT p.*
 		FROM posts p
@@ -278,6 +325,7 @@ func FindPostsWithAllTags(ctx context.Context, db *sqlx.DB, opts FindPostsOption
 		WHERE t.name IN (?)`)
 	bws(andDoesNotHaveTags)
 	bws(andScoreGreaterThan)
+	bws(andFavsGreaterThan)
 	bws(`
 		GROUP BY p.id, p.created_at, p.rating, p.image_width, p.image_height,
 				p.fav_count, p.file_ext, p.is_deleted, p.score, p.up_score, p.down_score
@@ -288,7 +336,7 @@ func FindPostsWithAllTags(ctx context.Context, db *sqlx.DB, opts FindPostsOption
 		LIMIT ?
 	) p
 	 JOIN (
-		SELECT pt.post_id, array_agg(tg.name) as tags
+		SELECT pt.post_id, array_agg(tg.name) as tags, array_agg(tg.category) as categories
 		FROM post_tags pt
 		JOIN tags tg ON pt.tag_id = tg.tag_id
 		GROUP BY pt.post_id
