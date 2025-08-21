@@ -20,29 +20,33 @@ import (
 )
 
 const (
-	comfyUrlConfig      = "comfy.url"
-	genBatchCountConfig = "generations.batch_count"
-	genPauseTimeConfig  = "generations.pause_time"
-	prefixConfig        = "generations.prefix"
-	genStripTagsConfig  = "search.strip_tags"
-	dbDebugConfig       = "db.debug"
-	dbPathConfig        = "db.path"
-	tagsConfig          = "search.tags"
-	excludeTagsConfig   = "search.exclude_tags"
-	minScoreConfig      = "search.min_score"
-	minFavsConfig       = "search.min_favs"
-	limitConfig         = "search.limit"
-	logLevelConfig      = "log.level"
+	comfyUrlKey       = "comfy.url"
+	genBatchCountKey  = "generations.batch_count"
+	genPauseTimeKey   = "generations.pause_time"
+	prefixKey         = "generations.prefix"
+	genStripTagsKey   = "search.strip_tags"
+	dbDebugKey        = "db.debug"
+	dbPathKey         = "db.path"
+	searchTagsKey     = "search.tags"
+	excludeTagsKey    = "search.exclude_tags"
+	minScoreKey       = "search.min_score"
+	minFavsKey        = "search.min_favs"
+	limitKey          = "search.limit"
+	logLevelKey       = "log.level"
+	styleKey          = "generations.style"
+	styleConfigsKey   = "styleConfigs"
+	defaultPrefixKey  = "generations.default_prefix"
+	defaultPostfixKey = "generations.default_postfix"
 )
 
 func LoadConfig(path string) (*koanf.Koanf, error) {
 	k := koanf.New(".")
 
 	defaults := map[string]any{
-		comfyUrlConfig:      "http://localhost:8188",
-		genBatchCountConfig: 2,
-		genPauseTimeConfig:  time.Second * 5,
-		dbDebugConfig:       false,
+		comfyUrlKey:      "http://localhost:8188",
+		genBatchCountKey: 2,
+		genPauseTimeKey:  time.Second * 5,
+		dbDebugKey:       false,
 	}
 
 	k.Load(confmap.Provider(defaults, "."), nil)
@@ -71,9 +75,9 @@ func run_main() error {
 		return err
 	}
 
-	if k.String(logLevelConfig) != "" {
+	if k.String(logLevelKey) != "" {
 		levelReader := slog.Level(0)
-		err := levelReader.UnmarshalText([]byte(k.String(logLevelConfig)))
+		err := levelReader.UnmarshalText([]byte(k.String(logLevelKey)))
 		if err != nil {
 			return fmt.Errorf("invalid log level: %w", err)
 		}
@@ -85,9 +89,9 @@ func run_main() error {
 		return fmt.Errorf("load db: %w", err)
 	}
 	defer db.Close()
-	slog.Info("connected to database", "path", k.String(dbPathConfig))
+	slog.Info("connected to database", "path", k.String(dbPathKey))
 
-	if k.Bool(dbDebugConfig) {
+	if k.Bool(dbDebugKey) {
 		DBDump(ctx, db)
 	}
 
@@ -96,7 +100,13 @@ func run_main() error {
 		return fmt.Errorf("load posts: %w", err)
 	}
 
-	if err := sendPosts(ctx, k, posts); err != nil {
+	genConfig := buildGenerationConfig(k)
+	client := ComfyAPIClient{
+		BaseURL: k.String(comfyUrlKey),
+	}
+	client.Init()
+
+	if err := sendPosts(ctx, client, genConfig, posts); err != nil {
 		return fmt.Errorf("send posts: %w", err)
 	}
 	return nil
@@ -104,9 +114,9 @@ func run_main() error {
 
 func loadDB(k *koanf.Koanf) (*sqlx.DB, error) {
 	// DuckDB creates a new database if file doesn't exist
-	dbPath := k.String(dbPathConfig)
+	dbPath := k.String(dbPathKey)
 	if _, err := os.Stat(dbPath); err != nil {
-		return nil, fmt.Errorf("error locating database file %s: %w", k.String(dbPathConfig), err)
+		return nil, fmt.Errorf("error locating database file %s: %w", k.String(dbPathKey), err)
 	}
 
 	return sqlx.Open("duckdb", dbPath+"?access_mode=read_only")
@@ -114,22 +124,22 @@ func loadDB(k *koanf.Koanf) (*sqlx.DB, error) {
 
 func loadPosts(ctx context.Context, k *koanf.Koanf, db *sqlx.DB) ([]TaggedPost, error) {
 	var minScore *int
-	if k.Exists(minScoreConfig) {
-		val := k.Int(minScoreConfig)
+	if k.Exists(minScoreKey) {
+		val := k.Int(minScoreKey)
 		minScore = &val
 	}
 	var minFavs *int
-	if k.Exists(minFavsConfig) {
-		val := k.Int(minFavsConfig)
+	if k.Exists(minFavsKey) {
+		val := k.Int(minFavsKey)
 		minFavs = &val
 	}
 	taggedPosts, err := FindPostsWithAllTags(ctx, db, FindPostsOptions{
-		Tags:        k.Strings(tagsConfig),
-		ExcludeTags: k.Strings(excludeTagsConfig),
+		Tags:        k.Strings(searchTagsKey),
+		ExcludeTags: k.Strings(excludeTagsKey),
 		MinScore:    minScore,
 		MinFavs:     minFavs,
 		Random:      true,
-		Limit:       k.Int(limitConfig),
+		Limit:       k.Int(limitKey),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("find tag string: %w", err)
@@ -144,8 +154,6 @@ func tagsToPrompt(b *strings.Builder, r *strings.Replacer, post TaggedPost, stri
 		tags[i], tags[j] = tags[j], tags[i]
 		tagcats[i], tagcats[j] = tagcats[j], tagcats[i]
 	})
-	fmt.Println("tags:", tags)
-	fmt.Println("tagcats:", tagcats)
 
 	wroteTag := false
 	for i, tag := range tags {
@@ -161,22 +169,51 @@ func tagsToPrompt(b *strings.Builder, r *strings.Replacer, post TaggedPost, stri
 	}
 }
 
-const bufferLength = 2048
+type GenerationConfig struct {
+	BatchCount int
+	PauseTime  time.Duration
+	Prefix     string
+	Postfix    string
+	StripTags  []string
+}
 
-func sendPosts(ctx context.Context, k *koanf.Koanf, posts []TaggedPost) error {
-	comfyURL := k.String(comfyUrlConfig)
-	batchCount := k.Int(genBatchCountConfig)
-	pauseTime := k.Duration(genPauseTimeConfig)
+const bufferLength = 4096
 
-	client := ComfyAPIClient{
-		BaseURL: comfyURL,
+func buildGenerationConfig(k *koanf.Koanf) GenerationConfig {
+
+	// start with defaults
+	config := GenerationConfig{
+		BatchCount: k.Int(genBatchCountKey),
+		PauseTime:  k.Duration(genPauseTimeKey),
+		Prefix:     k.String(defaultPrefixKey),
+		Postfix:    k.String(defaultPostfixKey),
+		StripTags:  k.Strings(genStripTagsKey),
 	}
-	client.Init()
 
+	// merge style-specific config if available
+	style := k.String(styleKey)
+	if style != "" {
+		styleConfigKey := fmt.Sprintf("%s.%s", styleConfigsKey, style)
+		if k.Exists(styleConfigKey) {
+			if prefix := k.String(styleConfigKey + ".prefix"); prefix != "" {
+				config.Prefix = prefix
+			}
+			if postfix := k.String(styleConfigKey + ".postfix"); postfix != "" {
+				config.Postfix = postfix
+			}
+			stripTags := k.Strings(styleConfigKey + ".strip_tags")
+			config.StripTags = append(config.StripTags, stripTags...)
+		}
+	}
+
+	return config
+}
+
+func sendPosts(ctx context.Context, client ComfyAPIClient, config GenerationConfig, posts []TaggedPost) error {
 	b := strings.Builder{}
 	r := strings.NewReplacer("_", " ", "(", "\\(", ")", "\\)")
-	stripTags := make(map[string]struct{}, len(k.Strings(genStripTagsConfig)))
-	for _, tag := range k.Strings(genStripTagsConfig) {
+	stripTags := make(map[string]struct{}, len(config.StripTags))
+	for _, tag := range config.StripTags {
 		stripTags[tag] = struct{}{}
 	}
 
@@ -187,14 +224,14 @@ func sendPosts(ctx context.Context, k *koanf.Koanf, posts []TaggedPost) error {
 
 		// Build prompt
 		b.Grow(bufferLength)
-		if prefix := k.String(prefixConfig); prefix != "" {
-			b.WriteString(prefix)
+		if config.Prefix != "" {
+			b.WriteString(config.Prefix)
 			b.WriteString(", ")
 		}
 		tagsToPrompt(&b, r, post, stripTags)
-		if postfix := k.String("generations.postfix"); postfix != "" {
+		if config.Postfix != "" {
 			b.WriteString(", ")
-			b.WriteString(postfix)
+			b.WriteString(config.Postfix)
 		}
 		if b.Len() > bufferLength {
 			numTooLong++
@@ -211,11 +248,11 @@ func sendPosts(ctx context.Context, k *koanf.Koanf, posts []TaggedPost) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(pauseTime / 2.0):
+		case <-time.After(config.PauseTime / 2.0):
 		}
 
-		slog.Info("sending generateImages", "count", batchCount)
-		if err := client.SendGenerate(ctx, batchCount); err != nil {
+		slog.Info("sending generateImages", "count", config.BatchCount)
+		if err := client.SendGenerate(ctx, config.BatchCount); err != nil {
 			slog.Error("sendGenerateImages failed", "error", err)
 			continue
 		}
@@ -225,7 +262,7 @@ func sendPosts(ctx context.Context, k *koanf.Koanf, posts []TaggedPost) error {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(pauseTime):
+			case <-time.After(config.PauseTime):
 			}
 		}
 	}
