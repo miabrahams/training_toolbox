@@ -52,12 +52,20 @@ func run_main() error {
 	}
 	slog.Info("loaded posts from database", "count", len(posts), "duration", time.Since(now))
 
+	if k.Bool(dryRunKey) {
+		slog.Info("dry run enabled, not sending posts.")
+		for _, post := range posts {
+			slog.Info("post data", "id", post.ID, "tags", post.Tags)
+		}
+		slog.Info("posts would be sent to ComfyAPIClient", "count", len(posts))
+		return nil
+	}
+
 	genConfig := buildGenerationOptions(k)
 	client := ComfyAPIClient{
 		BaseURL: k.String(comfyUrlKey),
 	}
 	client.Init()
-
 	if err := sendPosts(ctx, client, genConfig, posts); err != nil {
 		return fmt.Errorf("send posts: %w", err)
 	}
@@ -176,13 +184,13 @@ func buildGenerationOptions(k *koanf.Koanf) GenerationOptions {
 	if style != "" {
 		styleConfigKey := fmt.Sprintf("%s.%s", stylesKey, style)
 		if k.Exists(styleConfigKey) {
-			if prefix := k.String(styleConfigKey + ".prefix"); prefix != "" {
+			if prefix := k.String(styleConfigKey + prefixKey); prefix != "" {
 				genOpts.Prefix = prefix
 			}
-			if postfix := k.String(styleConfigKey + ".postfix"); postfix != "" {
+			if postfix := k.String(styleConfigKey + postfixKey); postfix != "" {
 				genOpts.Postfix = postfix
 			}
-			stripTags := k.Strings(styleConfigKey + ".strip_tags")
+			stripTags := k.Strings(styleConfigKey + stripTagsKey)
 			genOpts.StripTags = append(genOpts.StripTags, stripTags...)
 		}
 	}

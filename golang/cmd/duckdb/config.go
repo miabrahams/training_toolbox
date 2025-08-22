@@ -16,6 +16,7 @@ const (
 	dbPathKey         = "db.path"
 	dbDebugKey        = "diagnostics.database"
 	searchDebugKey    = "diagnostics.search"
+	dryRunKey         = "diagnostics.dry_run"
 	genBatchCountKey  = "generations.batch_count"
 	genAddRatingKey   = "generations.add_rating"
 	styleKey          = "generations.style"
