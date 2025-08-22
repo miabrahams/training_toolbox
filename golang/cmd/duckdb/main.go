@@ -89,6 +89,7 @@ func buildFindPostsOptions(k *koanf.Koanf) FindPostsOptions {
 		MinFavs:     minFavs,
 		Random:      true,
 		Limit:       k.Int(limitKey),
+		DebugQuery:  k.Bool(searchDebugKey),
 	}
 }
 

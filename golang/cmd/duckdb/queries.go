@@ -102,6 +102,7 @@ type FindPostsOptions struct {
 	MinUpScore  *int
 	Limit       int
 	Random      bool
+	DebugQuery  bool
 }
 
 func FindPosts(ctx context.Context, db *sqlx.DB, opts FindPostsOptions) ([]Post, error) {
@@ -138,28 +139,6 @@ func FindPosts(ctx context.Context, db *sqlx.DB, opts FindPostsOptions) ([]Post,
 	}
 	return posts, nil
 }
-
-/* Example query:
-
-SelectPostsQuery
-	SELECT p.*
-	FROM posts p
-	JOIN post_tags pt ON p.id = pt.post_id
-	JOIN tags t ON pt.tag_id = t.tag_id
-	WHERE t.name = ?
-	AND p.score > ?
-	ORDER BY random()
-	limit 5
-) p
-JOIN (
-	SELECT pt.post_id, array_agg(tg.name) as tags
-	FROM post_tags pt
-	JOIN tags tg ON pt.tag_id = tg.tag_id
-	GROUP BY post_id
-) t
-ON p.id = t.post_id
-`
-*/
 
 var (
 	taggedPostHeader = `
@@ -347,8 +326,10 @@ func FindPostsWithAllTags(ctx context.Context, db *sqlx.DB, opts FindPostsOption
 	}
 
 	var result []TaggedPost
-	fmt.Println("Query:", query)
-	fmt.Println("Args:", args)
+	if opts.DebugQuery {
+		fmt.Println("Query:", query)
+		fmt.Println("Args:", args)
+	}
 	if err := db.SelectContext(ctx, &result, query, args...); err != nil {
 		return nil, fmt.Errorf("query: %w", err)
 	}
