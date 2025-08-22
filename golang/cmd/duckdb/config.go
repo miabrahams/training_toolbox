@@ -12,16 +12,14 @@ import (
 
 const (
 	comfyUrlKey       = "comfy.url"
+	comfyPauseTimeKey = "comfy.pause_time"
 	dbPathKey         = "db.path"
 	dbDebugKey        = "diagnostics.database"
 	searchDebugKey    = "diagnostics.search"
 	genBatchCountKey  = "generations.batch_count"
-	genPauseTimeKey   = "generations.pause_time"
 	genAddRatingKey   = "generations.add_rating"
 	styleKey          = "generations.style"
 	genStripTagsKey   = "generations.strip_tags"
-	defaultPrefixKey  = "generations.default_prefix"
-	defaultPostfixKey = "generations.default_postfix"
 	searchTagsKey     = "search.tags"
 	excludeTagsKey    = "search.exclude_tags"
 	minScoreKey       = "search.min_score"
@@ -30,7 +28,7 @@ const (
 	randomizeKey      = "search.randomize"
 	showCountKey      = "search.show_count"
 	logLevelKey       = "log.level"
-	styleConfigsKey   = ".styleConfigs"
+	stylesKey         = "styles"
 	prefixKey         = ".prefix"
 	postfixKey        = ".postfix"
 	stripTagsKey      = ".strip_tags"
@@ -40,10 +38,10 @@ func LoadConfig(path string) (*koanf.Koanf, error) {
 	k := koanf.New(".")
 
 	defaults := map[string]any{
-		comfyUrlKey:      "http://localhost:8188",
-		genBatchCountKey: 2,
-		genPauseTimeKey:  time.Second * 5,
-		dbDebugKey:       false,
+		comfyUrlKey:       "http://localhost:8188",
+		genBatchCountKey:  2,
+		comfyPauseTimeKey: time.Second * 5,
+		dbDebugKey:        false,
 	}
 
 	k.Load(confmap.Provider(defaults, "."), nil)

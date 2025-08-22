@@ -45,10 +45,12 @@ func run_main() error {
 		level.Set(levelReader)
 	}
 
+	now := time.Now()
 	posts, err := runDatabaseOperations(ctx, k)
 	if err != nil {
 		return fmt.Errorf("load posts: %w", err)
 	}
+	slog.Info("loaded posts from database", "count", len(posts), "duration", time.Since(now))
 
 	genConfig := buildGenerationOptions(k)
 	client := ComfyAPIClient{
@@ -162,9 +164,9 @@ const bufferLength = 4096
 func buildGenerationOptions(k *koanf.Koanf) GenerationOptions {
 	genOpts := GenerationOptions{
 		BatchCount: k.Int(genBatchCountKey),
-		PauseTime:  k.Duration(genPauseTimeKey),
-		Prefix:     k.String(defaultPrefixKey),
-		Postfix:    k.String(defaultPostfixKey),
+		PauseTime:  k.Duration(comfyPauseTimeKey),
+		Prefix:     "",
+		Postfix:    "",
 		StripTags:  k.Strings(genStripTagsKey),
 		AddRating:  k.Bool(genAddRatingKey),
 	}
@@ -172,7 +174,7 @@ func buildGenerationOptions(k *koanf.Koanf) GenerationOptions {
 	// merge style config
 	style := k.String(styleKey)
 	if style != "" {
-		styleConfigKey := fmt.Sprintf("%s.%s", styleConfigsKey, style)
+		styleConfigKey := fmt.Sprintf("%s.%s", stylesKey, style)
 		if k.Exists(styleConfigKey) {
 			if prefix := k.String(styleConfigKey + ".prefix"); prefix != "" {
 				genOpts.Prefix = prefix
