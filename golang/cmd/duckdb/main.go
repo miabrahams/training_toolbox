@@ -12,48 +12,9 @@ import (
 
 	"github.com/jmoiron/sqlx"
 
-	"github.com/knadh/koanf/parsers/yaml"
-	"github.com/knadh/koanf/providers/confmap"
-	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
 	_ "github.com/marcboeker/go-duckdb"
 )
-
-const (
-	comfyUrlKey       = "comfy.url"
-	genBatchCountKey  = "generations.batch_count"
-	genPauseTimeKey   = "generations.pause_time"
-	prefixKey         = "generations.prefix"
-	genStripTagsKey   = "search.strip_tags"
-	dbDebugKey        = "db.debug"
-	dbPathKey         = "db.path"
-	searchTagsKey     = "search.tags"
-	excludeTagsKey    = "search.exclude_tags"
-	minScoreKey       = "search.min_score"
-	minFavsKey        = "search.min_favs"
-	limitKey          = "search.limit"
-	logLevelKey       = "log.level"
-	styleKey          = "generations.style"
-	styleConfigsKey   = "styleConfigs"
-	defaultPrefixKey  = "generations.default_prefix"
-	defaultPostfixKey = "generations.default_postfix"
-)
-
-func LoadConfig(path string) (*koanf.Koanf, error) {
-	k := koanf.New(".")
-
-	defaults := map[string]any{
-		comfyUrlKey:      "http://localhost:8188",
-		genBatchCountKey: 2,
-		genPauseTimeKey:  time.Second * 5,
-		dbDebugKey:       false,
-	}
-
-	k.Load(confmap.Provider(defaults, "."), nil)
-
-	err := k.Load(file.Provider(path), yaml.Parser())
-	return k, err
-}
 
 func main() {
 	if err := run_main(); err != nil {
@@ -84,23 +45,12 @@ func run_main() error {
 		level.Set(levelReader)
 	}
 
-	db, err := loadDB(k)
-	if err != nil {
-		return fmt.Errorf("load db: %w", err)
-	}
-	defer db.Close()
-	slog.Info("connected to database", "path", k.String(dbPathKey))
-
-	if k.Bool(dbDebugKey) {
-		DBDump(ctx, db)
-	}
-
-	posts, err := loadPosts(ctx, k, db)
+	posts, err := runDatabaseOperations(ctx, k)
 	if err != nil {
 		return fmt.Errorf("load posts: %w", err)
 	}
 
-	genConfig := buildGenerationConfig(k)
+	genConfig := buildGenerationOptions(k)
 	client := ComfyAPIClient{
 		BaseURL: k.String(comfyUrlKey),
 	}
@@ -112,17 +62,16 @@ func run_main() error {
 	return nil
 }
 
-func loadDB(k *koanf.Koanf) (*sqlx.DB, error) {
+func loadDB(dbPath string) (*sqlx.DB, error) {
 	// DuckDB creates a new database if file doesn't exist
-	dbPath := k.String(dbPathKey)
 	if _, err := os.Stat(dbPath); err != nil {
-		return nil, fmt.Errorf("error locating database file %s: %w", k.String(dbPathKey), err)
+		return nil, fmt.Errorf("error locating database file %s: %w", dbPath, err)
 	}
 
 	return sqlx.Open("duckdb", dbPath+"?access_mode=read_only")
 }
 
-func loadPosts(ctx context.Context, k *koanf.Koanf, db *sqlx.DB) ([]TaggedPost, error) {
+func buildFindPostsOptions(k *koanf.Koanf) FindPostsOptions {
 	var minScore *int
 	if k.Exists(minScoreKey) {
 		val := k.Int(minScoreKey)
@@ -133,14 +82,46 @@ func loadPosts(ctx context.Context, k *koanf.Koanf, db *sqlx.DB) ([]TaggedPost, 
 		val := k.Int(minFavsKey)
 		minFavs = &val
 	}
-	taggedPosts, err := FindPostsWithAllTags(ctx, db, FindPostsOptions{
+	return FindPostsOptions{
 		Tags:        k.Strings(searchTagsKey),
 		ExcludeTags: k.Strings(excludeTagsKey),
 		MinScore:    minScore,
 		MinFavs:     minFavs,
 		Random:      true,
 		Limit:       k.Int(limitKey),
-	})
+	}
+}
+
+// runDatabaseOperations connects to the DB and runs standard queries. It closes the database when finished.
+// TODO: When this becomes an interactive app, add dynamic database release
+func runDatabaseOperations(ctx context.Context, k *koanf.Koanf) ([]TaggedPost, error) {
+	dbPath := k.String(dbPathKey)
+	db, err := loadDB(dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("load db: %w", err)
+	}
+	defer db.Close()
+	slog.Info("connected to database", "path", k.String(dbPathKey))
+
+	if k.Bool(dbDebugKey) {
+		DBDump(ctx, db)
+	}
+
+	options := buildFindPostsOptions(k)
+	if k.Bool(dbDebugKey) {
+		DBDump(ctx, db)
+	}
+
+	// Show count if enabled
+	if k.Bool(showCountKey) {
+		count, err := CountPostsWithAllTags(ctx, db, options)
+		if err != nil {
+			return nil, fmt.Errorf("count matching posts: %w", err)
+		}
+		slog.Info("total posts matching search criteria", "count", count)
+	}
+
+	taggedPosts, err := FindPostsWithAllTags(ctx, db, options)
 	if err != nil {
 		return nil, fmt.Errorf("find tag string: %w", err)
 	}
@@ -148,15 +129,12 @@ func loadPosts(ctx context.Context, k *koanf.Koanf, db *sqlx.DB) ([]TaggedPost, 
 }
 
 func tagsToPrompt(b *strings.Builder, r *strings.Replacer, post TaggedPost, stripTags map[string]struct{}) {
-	tags := slices.Clone(post.Tags)
-	tagcats := slices.Clone(post.TagCategory)
-	rand.Shuffle(len(tags), func(i int, j int) {
-		tags[i], tags[j] = tags[j], tags[i]
-		tagcats[i], tagcats[j] = tagcats[j], tagcats[i]
+	rand.Shuffle(len(post.Tags), func(i int, j int) {
+		post.Tags[i], post.Tags[j] = post.Tags[j], post.Tags[i]
 	})
 
 	wroteTag := false
-	for i, tag := range tags {
+	for i, tag := range post.Tags {
 		if (i > 0) && wroteTag {
 			b.WriteString(", ")
 		}
@@ -169,52 +147,88 @@ func tagsToPrompt(b *strings.Builder, r *strings.Replacer, post TaggedPost, stri
 	}
 }
 
-type GenerationConfig struct {
+type GenerationOptions struct {
 	BatchCount int
 	PauseTime  time.Duration
 	Prefix     string
 	Postfix    string
 	StripTags  []string
+	AddRating  bool
 }
 
 const bufferLength = 4096
 
-func buildGenerationConfig(k *koanf.Koanf) GenerationConfig {
-
-	// start with defaults
-	config := GenerationConfig{
+func buildGenerationOptions(k *koanf.Koanf) GenerationOptions {
+	genOpts := GenerationOptions{
 		BatchCount: k.Int(genBatchCountKey),
 		PauseTime:  k.Duration(genPauseTimeKey),
 		Prefix:     k.String(defaultPrefixKey),
 		Postfix:    k.String(defaultPostfixKey),
 		StripTags:  k.Strings(genStripTagsKey),
+		AddRating:  k.Bool(genAddRatingKey),
 	}
 
-	// merge style-specific config if available
+	// merge style config
 	style := k.String(styleKey)
 	if style != "" {
 		styleConfigKey := fmt.Sprintf("%s.%s", styleConfigsKey, style)
 		if k.Exists(styleConfigKey) {
 			if prefix := k.String(styleConfigKey + ".prefix"); prefix != "" {
-				config.Prefix = prefix
+				genOpts.Prefix = prefix
 			}
 			if postfix := k.String(styleConfigKey + ".postfix"); postfix != "" {
-				config.Postfix = postfix
+				genOpts.Postfix = postfix
 			}
 			stripTags := k.Strings(styleConfigKey + ".strip_tags")
-			config.StripTags = append(config.StripTags, stripTags...)
+			genOpts.StripTags = append(genOpts.StripTags, stripTags...)
 		}
 	}
 
-	return config
+	return genOpts
 }
 
-func sendPosts(ctx context.Context, client ComfyAPIClient, config GenerationConfig, posts []TaggedPost) error {
+type PromptBuilderOptions struct {
+	GenerationOptions
+	Replacer  *strings.Replacer
+	StripTags map[string]struct{}
+}
+
+func buildPrompt(post TaggedPost, config PromptBuilderOptions) string {
 	b := strings.Builder{}
-	r := strings.NewReplacer("_", " ", "(", "\\(", ")", "\\)")
-	stripTags := make(map[string]struct{}, len(config.StripTags))
+	b.Grow(bufferLength)
+	if config.Prefix != "" {
+		b.WriteString(config.Prefix)
+		b.WriteString(", ")
+	}
+
+	postCopy := post
+	if config.AddRating {
+		postCopy.Tags = append(slices.Clone(postCopy.Tags), Ratings[post.Rating])
+	} else {
+		postCopy.Tags = slices.Clone(postCopy.Tags)
+	}
+
+	tagsToPrompt(&b, config.Replacer, post, config.StripTags)
+
+	if config.Postfix != "" {
+		b.WriteString(", ")
+		b.WriteString(config.Postfix)
+	}
+
+	prompt := b.String()
+	b.Reset()
+
+	return prompt
+}
+
+func sendPosts(ctx context.Context, client ComfyAPIClient, config GenerationOptions, posts []TaggedPost) error {
+	promptOpts := PromptBuilderOptions{
+		GenerationOptions: config,
+	}
+	promptOpts.Replacer = strings.NewReplacer("_", " ", "(", "\\(", ")", "\\)")
+	promptOpts.StripTags = make(map[string]struct{}, len(config.StripTags))
 	for _, tag := range config.StripTags {
-		stripTags[tag] = struct{}{}
+		promptOpts.StripTags[tag] = struct{}{}
 	}
 
 	numTooLong := 0
@@ -222,25 +236,9 @@ func sendPosts(ctx context.Context, client ComfyAPIClient, config GenerationConf
 	for i, post := range posts {
 		slog.Info("processing post", "index", i, "post", post.ID)
 
-		// Build prompt
-		b.Grow(bufferLength)
-		if config.Prefix != "" {
-			b.WriteString(config.Prefix)
-			b.WriteString(", ")
-		}
-		tagsToPrompt(&b, r, post, stripTags)
-		if config.Postfix != "" {
-			b.WriteString(", ")
-			b.WriteString(config.Postfix)
-		}
-		if b.Len() > bufferLength {
-			numTooLong++
-		}
+		prompt := buildPrompt(post, promptOpts)
 
-		prompt := b.String()
-		b.Reset()
-
-		slog.Info("sending promptReplace", "prompt", prompt, "width", post.ImageWidth, "height", post.ImageHeight)
+		slog.Debug("sending promptReplace", "prompt", prompt, "width", post.ImageWidth, "height", post.ImageHeight)
 		if err := client.SendPromptReplace(ctx, prompt, post.ImageWidth, post.ImageHeight); err != nil {
 			slog.Error("promptReplace failed", "error", err)
 			continue

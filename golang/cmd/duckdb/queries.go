@@ -14,8 +14,6 @@ import (
 	_ "github.com/marcboeker/go-duckdb"
 )
 
-// TODO: Rating
-
 // Database models
 type Post struct {
 	ID          int64     `db:"id"`
@@ -49,10 +47,10 @@ var Categories = []string{
 	8: "invalid",     // ok
 }
 
-var Ratings = []map[string]string{
-	{"g": "general"},
-	{"q": "questionable"},
-	{"e": "explicit"},
+var Ratings = map[string]string{
+	"g": "general",
+	"q": "questionable",
+	"e": "explicit",
 }
 
 type TagCount struct {
@@ -356,6 +354,71 @@ func FindPostsWithAllTags(ctx context.Context, db *sqlx.DB, opts FindPostsOption
 	}
 
 	return result, nil
+}
+
+// CountPostsWithAllTags counts the total number of posts matching the search criteria
+func CountPostsWithAllTags(ctx context.Context, db *sqlx.DB, opts FindPostsOptions) (int, error) {
+	if len(opts.Tags) == 0 {
+		return 0, fmt.Errorf("no tags provided in options: %v", opts)
+	}
+
+	args := []any{opts.Tags}
+
+	// build interstitial clauses
+	andDoesNotHaveTags := ""
+	if len(opts.ExcludeTags) > 0 {
+		andDoesNotHaveTags = `
+			AND p.id NOT IN (
+			SELECT pt2.post_id
+			FROM post_tags pt2
+			JOIN tags t2 ON pt2.tag_id = t2.tag_id
+			WHERE t2.name IN (?)
+		)`
+		args = append(args, opts.ExcludeTags)
+	}
+
+	andScoreGreaterThan := ""
+	if opts.MinScore != nil {
+		andScoreGreaterThan = "AND p.score > ?"
+		args = append(args, *opts.MinScore)
+	}
+
+	andFavsGreaterThan := ""
+	if opts.MinFavs != nil {
+		andFavsGreaterThan = "AND p.fav_count > ?"
+		args = append(args, *opts.MinFavs)
+	}
+
+	args = append(args, len(opts.Tags))
+
+	builder := strings.Builder{}
+	bws := func(s string) { builder.WriteString(s) }
+	bws(`
+	SELECT COUNT(*) FROM (
+		SELECT p.id
+		FROM posts p
+		JOIN post_tags pt ON p.id = pt.post_id
+		JOIN tags t ON pt.tag_id = t.tag_id
+		WHERE t.name IN (?)`)
+	bws(andDoesNotHaveTags)
+	bws(andScoreGreaterThan)
+	bws(andFavsGreaterThan)
+	bws(`
+		GROUP BY p.id
+		HAVING COUNT(DISTINCT t.name) = ?
+	)`)
+
+	query, args, err := sqlx.In(builder.String(), args...)
+	if err != nil {
+		return 0, err
+	}
+
+	var count int
+	if err := db.GetContext(ctx, &count, query, args...); err != nil {
+		return 0, fmt.Errorf("count query: %w", err)
+	}
+
+	return count, nil
 }
 
 type Pragma struct {
