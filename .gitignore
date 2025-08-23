@@ -9,5 +9,6 @@ node_modules
 unused_tag_finder/tags.csv
 unused_tag_finder/clip_vocab.json
 config.yml
+secrets.yml
 
 models/*
