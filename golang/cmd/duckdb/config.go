@@ -50,3 +50,20 @@ func LoadConfig(path string) (*koanf.Koanf, error) {
 	err := k.Load(file.Provider(path), yaml.Parser())
 	return k, err
 }
+
+func LoadSecrets(path string) (*koanf.Koanf, error) {
+	k := koanf.New(".")
+
+	defaults := map[string]any{
+		"DEEPSEEK_API_KEY": "",
+	}
+
+	k.Load(confmap.Provider(defaults, "."), nil)
+
+	err := k.Load(file.Provider(path), yaml.Parser())
+	if err != nil {
+		return nil, err
+	}
+
+	return k, nil
+}
