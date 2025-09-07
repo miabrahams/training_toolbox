@@ -7,6 +7,7 @@ from src.ui.tag_analysis_tab import create_tag_analysis_tab
 from src.ui.frame_extractor_tab import create_frame_extractor_tab
 from src.ui.prompt_search_tab import create_prompt_search_tab
 from src.ui.direct_search_tab import create_direct_search_tab
+from src.ui.comfy_prompt_extractor_tab import create_comfy_prompt_extractor_tab
 from src.tag_analyzer.prompt_data import initialize_prompt_data, PromptData
 from src.tag_analyzer import create_analyzer
 from src.tag_analyzer.database import TagDatabase
@@ -103,6 +104,9 @@ with gr.Blocks() as app:
     )
 
     with gr.Tabs():
+        # ComfyUI Prompt Extractor tab (no dependencies needed)
+        comfy_extractor_components = create_comfy_prompt_extractor_tab()
+        
         # Frame extractor tab
         frame_extractor_components = create_frame_extractor_tab()
 

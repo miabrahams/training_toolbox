@@ -287,3 +287,50 @@ def extract_positive_prompt(prompt_dict: dict) -> str:
 
     # If nothing is found, raise an error mentioning the file name.
     raise Exception("Positive prompt not found")
+
+
+def extract_negative_prompt(prompt_dict: dict) -> str:
+    """
+    Extract the negative prompt from ComfyUI workflow data.
+    Similar to extract_positive_prompt but looks for negative conditioning nodes.
+    
+    :param prompt_dict: The prompt dictionary from ComfyUI workflow.
+    :return: The extracted negative prompt string.
+    :raises Exception: If no negative prompt is found.
+    """
+    # Heuristic 1: Direct lookup by expected negative node types
+    for schema in [Schema3.negative_node, Schema2.negative_node]:
+        node = prompt_dict.get(schema.node_id, {})
+        if node.get("class_type", "") == schema.node_type:
+            prompt_text = node.get("inputs", {}).get(schema.input_name)
+            if prompt_text and isinstance(prompt_text, str) and prompt_text.strip():
+                return prompt_text
+    
+    # Heuristic 2: Traverse the graph starting from a KSampler node:
+    ksamplers = []
+    for _, node in prompt_dict.items():
+        class_type = node.get("class_type", "")
+        if class_type in ["KSampler", "CFGGuider"] or "KSamplerAdvanced" in class_type:
+            ksamplers.append(node)
+    
+    for node in ksamplers:
+        input_node = get_parent(prompt_dict, node, "negative")
+        if not input_node:
+            continue
+        # Simple CLIPTextEncode node
+        if "CLIPTextEncode" in input_node.get("class_type", ""):
+            prompt_text = input_node.get("inputs", {}).get("text")
+            if prompt_text and isinstance(prompt_text, str) and prompt_text.strip():
+                return prompt_text
+        # ConditioningConcat (get both parent inputs)
+        if "ConditioningConcat" in input_node.get("class_type", ""):
+            prompt_text = []
+            for input_name in ["conditioning_to", "conditioning_from"]:
+                cond_input = get_parent(prompt_dict, input_node, input_name)
+                if cond_input:
+                    prompt_text.append(cond_input.get("inputs", {}).get("text"))
+            if all(isinstance(text, str) and text.strip() for text in prompt_text):
+                return " ".join(prompt_text)
+    
+    # If nothing is found, return empty string (negative prompts are optional)
+    return ""
