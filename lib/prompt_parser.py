@@ -130,14 +130,14 @@ def strip_prompt_markup(prompt: str) -> str:
     prompt = re.sub(r'\s+', ' ', prompt)
     return prompt.strip()
 
-special_tags =  ['source_furry', 'source_anime', 'source_cartoon']
-special_tags += ['score_9', 'score_8_up', 'score_7_up', 'score_6_up', 'score_5_up', 'score_4_up']
+special_tags =  ['score_9', 'score_8_up', 'score_7_up', 'score_6_up', 'score_5_up', 'score_4_up']
 special_tags += ['rating_explicit', 'rating_questionable', 'rating_safe']
+special_tags += ['source_anime', 'source_pony', 'source_furry', 'source_cartoon']
 special_tags += ['safe', 'questionable', 'explicit']
 special_tags += ['illustration', 'digital illustration art', 'official art', 'edit']
 special_tags += ['masterpiece', 'best quality', 'absurdres', 'hires', 'hi res', 'very awa', 'very aesthetic', '()',]
 special_tags += ['newest', 'year 2022', 'year 2023', 'year 2024', '2022', '2023', '2024']
-ignore_tags = ['trmk2', 'csr style', "tan fur", "red body", "realistic", "solo", "markings"]
+ignore_tags = []
 
 def remove_extra_commas(prompt: str) -> str:
     """
