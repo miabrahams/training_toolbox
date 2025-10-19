@@ -8,7 +8,8 @@ from src.ui.frame_extractor_tab import create_frame_extractor_tab
 from src.ui.prompt_search_tab import create_prompt_search_tab
 from src.ui.direct_search_tab import create_direct_search_tab
 from src.ui.comfy_prompt_extractor_tab import create_comfy_prompt_extractor_tab
-from src.tag_analyzer.prompt_data import initialize_prompt_data, PromptData
+from src.tag_analyzer.prompt_data import PromptData
+from src.tag_analyzer.controller import PromptProcessor
 from src.tag_analyzer import create_analyzer
 from src.tag_analyzer.database import TagDatabase
 
@@ -80,7 +81,9 @@ with gr.Blocks() as app:
 
             # Initialize prompt data with progress updates
             progress(0.1, "Loading prompt data...")
-            prompt_data, db = initialize_prompt_data(db_path_obj, progress)
+            # Initialize via controller (keeps SQL out of PromptData)
+            processor = PromptProcessor(TagDatabase(db_path_obj))
+            prompt_data, db = processor.initialize_prompt_data(db_path_obj, progress)
             progress(0.5, "Creating analyzer...")
 
             # Initialize analyzer without computing analysis yet
@@ -106,7 +109,7 @@ with gr.Blocks() as app:
     with gr.Tabs():
         # ComfyUI Prompt Extractor tab (no dependencies needed)
         comfy_extractor_components = create_comfy_prompt_extractor_tab()
-        
+
         # Frame extractor tab
         frame_extractor_components = create_frame_extractor_tab()
 
