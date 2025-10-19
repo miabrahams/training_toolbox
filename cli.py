@@ -2,11 +2,11 @@
 """CLI for prompt database maintenance.
 
 Usage examples:
-    # Process pending prompts into prompt_texts
+    # Process pending prompts into prompt_fields
     python cli.py --db data/prompts.sqlite
 
-    # Reset (drop and recreate) prompt_texts table
-    python cli.py reset_prompt_texts --db data/prompts.sqlite
+    # Reset (drop and recreate) prompt_fields table
+    python cli.py reset_prompt_fields --db data/prompts.sqlite
 """
 
 from pathlib import Path
@@ -14,6 +14,14 @@ import argparse
 
 from lib.database import TagDatabase
 from src.tag_analyzer.processor import PromptProcessor
+
+
+def reset_prompt_fields(db: TagDatabase):
+    """Drop and recreate the prompt_fields table."""
+    db.drop_prompt_fields()
+    db.ensure_schema()
+    print("Prompt fields table reset.")
+
 
 
 def main():
@@ -25,27 +33,25 @@ def main():
         "--db", dest="db_path", type=Path, default=Path("data/prompts.sqlite"), help="Path to SQLite database"
     )
 
-    _ = subparsers.add_parser('reset_prompt_texts')
+    _ = subparsers.add_parser('reset_prompt_fields')
 
     args = parser.parse_args()
 
     db = TagDatabase(args.db_path)
 
+    progress = lambda x, y: print(f"Progress: {x*100:.1f}% - {y}")
+
+
     # Dispatch based on command; default to processing when no command given
-    if args.command == "reset_prompt_texts":
-        print(f"Dropping prompt_texts in {args.db_path}...")
-        db.drop_prompt_texts()
-        print("Done.")
-        return
-
-    # Default: process pending prompts
-    processor = PromptProcessor(db)
-
-    def progress(x, y):
-        return print(f"Progress: {x*100:.1f}% - {y}")
-
-    stats = processor.process_pending(progress)
-    print(f"Processed: {stats.processed}, failed_extract: {stats.failed_extract}, errors: {stats.errors}")
+    match args.command:
+        case "reset_prompt_fields":
+            reset_prompt_fields(db)
+            return
+        case _:
+            # Default: ensure schema and process pending prompts
+            processor = PromptProcessor(db)
+            stats = processor.process_new_prompts(progress)
+            print(f"Processed: {stats.processed}, failed_extract: {stats.failed_extract}, errors: {stats.errors}")
 
 
 if __name__ == "__main__":
