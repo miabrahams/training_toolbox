@@ -25,7 +25,6 @@ from sqlalchemy.orm import (
     sessionmaker,
     Session,
 )
-from collections import Counter
 
 
 class Base(DeclarativeBase):
@@ -72,6 +71,7 @@ class PromptText(Base):
     cfg: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     sampler_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     scheduler: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    seed: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     rescale_cfg: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     perp_neg: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
