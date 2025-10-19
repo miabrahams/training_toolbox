@@ -7,7 +7,7 @@ from copy import deepcopy
 import sqlite3
 
 
-from lib.comfy_analysis import ComfyImage, fileToComfyImage, SchemaNode, Schema3, extract_positive_prompt
+from lib.comfy_schemas.comfy_analysis import ComfyImage, fileToComfyImage, SchemaNode, Schema3, extract_positive_prompt
 # from lib.comfy_analysis import Schema2, get_parent, prompt_schedule_gen05, prompt_schedule_gen04
 
 pp = pprint.PrettyPrinter()

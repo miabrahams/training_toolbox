@@ -2,7 +2,7 @@ import gradio as gr
 from typing import Dict, Any
 from src.tag_analyzer.types import ErrorResult
 
-from src.tag_analyzer import TagAnalyzer
+from src.tag_analyzer.tag_analyzer import TagAnalyzer
 
 def search_prompts(analyzer: TagAnalyzer | None, query, case_sensitive=False, limit=500, progress=gr.Progress()):
     """Search prompts using the analyzer"""
