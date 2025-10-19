@@ -40,14 +40,47 @@ roles:
     inputs:
       aspect_ratio: aspect_ratio
       swap_dimensions: swap_dimensions
+
+  # These were disabled in the current prompt so aren't working in the test.
+  ip_toggle:
+    node_id: 570
+    node_type: "PrepImageForClipVision"
+    optional_group: ip_adapter
+  ip_weight:
+    node_id: 569
+    optional_group: ip_adapter
+    node_type: "IPAdapterAdvanced"
+    inputs:
+      weight: weight
+  ip_image:
+    node_id: 572
+    optional_group: ip_adapter
+    node_type: "Load image with metadata [Crystools]"
+    inputs:
+      image: image
+  rescale_cfg:
+    node_id: 585
+    optional_group: rescale_cfg
+    node_type: "RescaleCFG"
+  perp_neg:
+    node_id: 576
+    optional_group: perp_neg
+    node_type: "PerpNegGuider"
+
 outputs:
   positive_prompt: [positive, text]
   checkpoint: [checkpoint, ckpt_name]
   seed: [seed, seed]
   loras: [loras, prompt]
+  negative_prompt: [negative, prompt]
   steps: [sampler, steps_total]
   cfg: [sampler, cfg]
   sampler_name: [sampler, sampler_name]
   scheduler: [sampler, scheduler]
   aspect_ratio: [aspect_ratio, aspect_ratio]
   swap_dimensions: [aspect_ratio, swap_dimensions]
+  ip_enabled: [ip_toggle, _enabled]
+  ip_image: [ip_image, image]
+  ip_weight: [ip_weight, weight]
+  rescale_cfg: [rescale_cfg, _enabled]
+  perp_neg: [perp_neg, _enabled]

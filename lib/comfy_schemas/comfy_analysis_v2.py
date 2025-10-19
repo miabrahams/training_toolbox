@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Tuple, Optional
 
 import yaml
 
@@ -27,8 +27,9 @@ from lib.metadata import read_comfy_metadata
 @dataclass(frozen=True)
 class RoleSpec:
     node_id: str
-    node_type: str
+    node_type: Optional[str]
     inputs: Dict[str, str]
+    optional_group: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -37,6 +38,7 @@ class SchemaSpec:
     name: str
     roles: Dict[str, RoleSpec]
     outputs: Dict[str, Tuple[str, str]]  # output_name -> (role, input_key)
+    groups: Dict[str, set]  # optional groups -> set of role names
 
 
 def _load_schema(schema_path: str | Path) -> SchemaSpec:
@@ -45,14 +47,20 @@ def _load_schema(schema_path: str | Path) -> SchemaSpec:
 
     # Normalize node_id to strings to match Comfy prompt dict keys
     roles: Dict[str, RoleSpec] = {}
+    groups: Dict[str, set] = {}
     for role_name, role in data.get("roles", {}).items():
         node_id_val = role.get("node_id")
         node_id = str(node_id_val) if node_id_val is not None else None
-        node_type = role.get("node_type")
+        node_type = role.get("node_type")  # optional; when omitted, skip type check
         inputs = role.get("inputs", {}) or {}
-        if node_id is None or node_type is None:
-            raise ValueError(f"Schema missing node_id or node_type for role '{role_name}'")
-        roles[role_name] = RoleSpec(node_id=node_id, node_type=node_type, inputs=inputs)
+        optional_group = role.get("optional_group")
+        if node_id is None:
+            raise ValueError(f"Schema missing node_id for role '{role_name}'")
+        roles[role_name] = RoleSpec(
+            node_id=node_id, node_type=node_type, inputs=inputs, optional_group=optional_group
+        )
+        if optional_group:
+            groups.setdefault(optional_group, set()).add(role_name)
 
     # Normalize outputs into (role, input) tuples
     outputs: Dict[str, Tuple[str, str]] = {}
@@ -73,6 +81,7 @@ def _load_schema(schema_path: str | Path) -> SchemaSpec:
         name=str(data.get("name", "")),
         roles=roles,
         outputs=outputs,
+        groups=groups,
     )
 
 
@@ -80,11 +89,12 @@ def _validate_node(prompt_graph: Dict[str, Any], role: str, role_spec: RoleSpec)
     node = prompt_graph.get(role_spec.node_id)
     if node is None:
         raise ValueError(f"Node for role '{role}' (id={role_spec.node_id}) not found in prompt graph")
-    class_type = node.get("class_type")
-    if class_type != role_spec.node_type:
-        raise ValueError(
-            f"Node type mismatch for role '{role}': expected '{role_spec.node_type}', got '{class_type}'"
-        )
+    if role_spec.node_type:
+        class_type = node.get("class_type")
+        if class_type != role_spec.node_type:
+            raise ValueError(
+                f"Node type mismatch for role '{role}': expected '{role_spec.node_type}', got '{class_type}'"
+            )
     return node
 
 
@@ -92,9 +102,19 @@ def extract_from_prompt(prompt_graph: Dict[str, Any], schema_path: str | Path) -
     schema = _load_schema(schema_path)
 
     # Validate all roles exist and types match
+    # First pass: detect which optional groups are present (at least one node found)
+    group_present: Dict[str, bool] = {g: False for g in schema.groups}
     resolved_nodes: Dict[str, Dict[str, Any]] = {}
     for role_name, role_spec in schema.roles.items():
-        resolved_nodes[role_name] = _validate_node(prompt_graph, role_name, role_spec)
+        node = prompt_graph.get(role_spec.node_id)
+        if node is None and role_spec.optional_group:
+            # defer validation; may be skipped if entire group absent
+            continue
+        # validate (will raise if missing and not in optional group)
+        resolved = _validate_node(prompt_graph, role_name, role_spec)
+        resolved_nodes[role_name] = resolved
+        if role_spec.optional_group:
+            group_present[role_spec.optional_group] = True
 
     # Extract required outputs
     result: Dict[str, Any] = {"schema_version": schema.version, "schema_name": schema.name}
@@ -102,6 +122,18 @@ def extract_from_prompt(prompt_graph: Dict[str, Any], schema_path: str | Path) -
         role_spec = schema.roles.get(role)
         if role_spec is None:
             raise ValueError(f"Output '{out_name}' references unknown role '{role}'")
+        # If role belongs to an optional group and the group isn't present in the graph, skip
+        if role_spec.optional_group and not group_present.get(role_spec.optional_group, False):
+            continue
+        # Special case: presence-based flag
+        if input_key == "_enabled":
+            # Presence-based: this specific role's node must be present (validated)
+            if role in resolved_nodes:
+                result[out_name] = True
+            # If node not resolved (missing), and it's optional, skip silently
+            # (group absence already handled above). Do not raise.
+            continue
+
         node = resolved_nodes[role]
 
         inputs = node.get("inputs", {})

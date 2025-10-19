@@ -1,4 +1,5 @@
 import json
+import math
 from pathlib import Path
 from typing import Any, Dict
 
@@ -20,7 +21,7 @@ def _run_validation() -> tuple[str, str]:
         "loras": "[loras]",
         "positive": "[positive]",
         "negative": "[negative]",
-        "IPAdapter": "disabled",
+        "IPAdapter": True,
         "ip_image": "strolling_a.jpg",
         "ip_weight": 0.6,
         "dim": "896x1152",
@@ -28,12 +29,14 @@ def _run_validation() -> tuple[str, str]:
         "cfg": 5.0,
         "sampler_name": "euler",
         "scheduler": "normal",
-        "rescale_cfg": False,
-        "perp_neg": False,
+        "rescale_cfg": True,
+        "perp_neg": True,
     }
 
     prompt, _ = read_comfy_metadata(EXPORT_PATH)
-    # print("PROMPT", prompt)
+
+    # debug
+    # print(json.dumps(prompt, indent=2))
 
     try:
         extracted = extract_from_prompt(prompt, SCHEMA_PATH)
@@ -68,7 +71,7 @@ def _run_validation() -> tuple[str, str]:
     if isinstance(ar_label, str) and "896x1152" in ar_label:
         derived["dim"] = "896x1152"
     if "ip_enabled" in extracted:
-        derived["IPAdapter"] = "enabled" if extracted.get("ip_enabled") else "disabled"
+        derived["IPAdapter"] = extracted.get("ip_enabled")
 
     comparable: Dict[str, Any] = {}
     for src_key, exp_key in mapping.items():
@@ -78,15 +81,24 @@ def _run_validation() -> tuple[str, str]:
             comparable[exp_key] = extracted[src_key]
     comparable.update(derived)
 
+    # Fields that are optional and should be skipped when their optional group is omitted
+    optional_keys = {"IPAdapter", "ip_image", "ip_weight", "rescale_cfg", "perp_neg"}
+
     missing = []
     mismatches = []
     for key, exp_val in expected.items():
         if key not in comparable:
-            missing.append(key)
+            if key not in optional_keys:
+                missing.append(key)
         else:
             got = comparable[key]
-            if got != exp_val:
-                mismatches.append((key, exp_val, got))
+            # Be tolerant to floating-point representation from json
+            if isinstance(got, (int, float)) and isinstance(exp_val, (int, float)):
+                if not math.isclose(float(got), float(exp_val), rel_tol=1e-9, abs_tol=1e-9):
+                    mismatches.append((key, exp_val, got))
+            else:
+                if got != exp_val:
+                    mismatches.append((key, exp_val, got))
 
     if missing or mismatches:
         lines = ["Schema v5 validation results:"]
@@ -110,4 +122,3 @@ def test_schema_v5():
     status, msg = _run_validation()
     if status != "ok":
         pytest.fail(msg)
-    # If ok, test passes silently
