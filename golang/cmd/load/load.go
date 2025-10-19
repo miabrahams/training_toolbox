@@ -278,7 +278,6 @@ func (s *sqlitePromptDB) InsertBatch(batch []fileResult) error {
 }
 
 func (d *duckdbPromptDB) InsertBatch(batch []fileResult) error {
-	// DuckDB supports ON CONFLICT DO UPDATE; use same statement as SQLite.
 	return (&sqlitePromptDB{basePromptDB: d.basePromptDB}).InsertBatch(batch)
 }
 
