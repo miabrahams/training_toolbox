@@ -13,7 +13,7 @@ from pathlib import Path
 import argparse
 
 from src.tag_analyzer.database import TagDatabase
-from src.tag_analyzer.controller import PromptProcessor
+from src.tag_analyzer.processor import PromptProcessor
 
 
 def main():

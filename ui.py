@@ -9,7 +9,7 @@ from src.ui.prompt_search_tab import create_prompt_search_tab
 from src.ui.direct_search_tab import create_direct_search_tab
 from src.ui.comfy_prompt_extractor_tab import create_comfy_prompt_extractor_tab
 from src.tag_analyzer.prompt_data import PromptData
-from src.tag_analyzer.controller import PromptProcessor
+from src.tag_analyzer.processor import PromptProcessor
 from src.tag_analyzer.tag_analyzer import create_analyzer
 from src.tag_analyzer.database import TagDatabase
 
