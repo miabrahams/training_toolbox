@@ -2,9 +2,7 @@
 import os
 import pprint
 import json
-from typing import Any, Dict, Union
-from copy import deepcopy
-import sqlite3
+from pathlib import Path
 
 
 from lib.comfy_schemas.comfy_analysis import ComfyImage, fileToComfyImage, SchemaNode, Schema3, extract_positive_prompt
@@ -14,11 +12,11 @@ pp = pprint.PrettyPrinter()
 # Test single image
 
 # TODO: Use sqlite dump
-data_path = 'data/'
+data_path = Path('data/')
 
 images = [img for img in os.listdir(data_path) if img[-4:] == '.png']
 
 print(f"Processing {len(images)} images")
-ImageObjects = [fileToComfyImage(data_path + img) for img in images]
+ImageObjects = [fileToComfyImage(data_path / img) for img in images]
 
-img = [img for img in ImageObjects if 'Dragon' in img.filename][0]
+img = [img for img in ImageObjects if 'Dragon' in str(img)][0]

@@ -2,6 +2,7 @@ from lib.metadata import read_comfy_metadata
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Optional, Tuple
 from copy import deepcopy
+from pathlib import Path
 import re
 
 
@@ -20,12 +21,12 @@ def scrape_node(node):
     else:
         raise Exception('Cannot parse node: ' + str(node))
 
-def fileToComfyImage(filename: str) -> 'ComfyImage':
+def fileToComfyImage(filename: Path) -> 'ComfyImage':
     prompt, workflow = read_comfy_metadata(filename)
     return ComfyImage(filename, prompt, workflow)
 
 class ComfyImage:
-    def __init__(self, filename: str, prompt: dict, workflow: dict):
+    def __init__(self, filename: Path, prompt: dict, workflow: dict):
         self.prompt = prompt
         self.workflow = workflow
         self.filename = filename
@@ -293,7 +294,7 @@ def extract_negative_prompt(prompt_dict: dict) -> str:
     """
     Extract the negative prompt from ComfyUI workflow data.
     Similar to extract_positive_prompt but looks for negative conditioning nodes.
-    
+
     :param prompt_dict: The prompt dictionary from ComfyUI workflow.
     :return: The extracted negative prompt string.
     :raises Exception: If no negative prompt is found.
@@ -305,14 +306,14 @@ def extract_negative_prompt(prompt_dict: dict) -> str:
             prompt_text = node.get("inputs", {}).get(schema.input_name)
             if prompt_text and isinstance(prompt_text, str) and prompt_text.strip():
                 return prompt_text
-    
+
     # Heuristic 2: Traverse the graph starting from a KSampler node:
     ksamplers = []
     for _, node in prompt_dict.items():
         class_type = node.get("class_type", "")
         if class_type in ["KSampler", "CFGGuider"] or "KSamplerAdvanced" in class_type:
             ksamplers.append(node)
-    
+
     for node in ksamplers:
         input_node = get_parent(prompt_dict, node, "negative")
         if not input_node:
@@ -331,6 +332,6 @@ def extract_negative_prompt(prompt_dict: dict) -> str:
                     prompt_text.append(cond_input.get("inputs", {}).get("text"))
             if all(isinstance(text, str) and text.strip() for text in prompt_text):
                 return " ".join(prompt_text)
-    
+
     # If nothing is found, return empty string (negative prompts are optional)
     return ""
