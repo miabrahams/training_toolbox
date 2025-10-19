@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Callable, Optional, Tuple
+from typing import Callable
 from pathlib import Path
 
 from lib.prompt_parser import clean_prompt

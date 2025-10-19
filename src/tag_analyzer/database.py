@@ -1,176 +1,184 @@
-import sqlite3
-from typing import Dict, List, Tuple
-from collections import Counter
 from pathlib import Path
+from typing import Dict, List, Tuple, Optional
+from datetime import datetime
+
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    Text,
+    create_engine,
+    func,
+    inspect,
+    select,
+    text as sql_text,
+)
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    mapped_column,
+    relationship,
+    sessionmaker,
+    Session,
+)
+from collections import Counter
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+class Prompt(Base):
+    __tablename__ = "prompts"
+
+    file_path: Mapped[str] = mapped_column(String, primary_key=True)
+    prompt: Mapped[str] = mapped_column(Text, nullable=False)
+
+    prompt_text: Mapped["PromptText"] = relationship(
+        back_populates="prompt", uselist=False, cascade="all, delete-orphan"
+    )
+
+
+class PromptText(Base):
+    __tablename__ = "prompt_texts"
+    file_path: Mapped[str] = mapped_column(String, ForeignKey("prompts.file_path"), primary_key=True)
+    positive_prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    cleaned_prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    processed: Mapped[Optional[bool]] = mapped_column(Boolean, default=False, nullable=True)
+    last_updated: Mapped[datetime] = mapped_column(DateTime, server_default=func.current_timestamp())
+
+    prompt: Mapped["Prompt"] = relationship(back_populates="prompt_text")
+
+
+Index("idx_cleaned_prompt", PromptText.cleaned_prompt)
 
 
 class TagDatabase:
-    """SQLite repository for prompt analysis data (no business logic)."""
+    """SQLAlchemy-based repository for prompt analysis data."""
 
     def __init__(self, db_path: Path = Path("data/prompts.sqlite")):
         self.db_path = db_path
-
-        if not self.db_path.exists():
-            # Defer creation to caller; some commands may just inspect paths
-            print(f"Database not found at {self.db_path}")
-            return
-
-        self.ensure_schema()
+        self.engine = create_engine(f"sqlite:///{db_path}", future=True)
+        self.SessionLocal = sessionmaker(bind=self.engine, future=True, class_=Session)
 
     def ensure_schema(self):
-        conn = sqlite3.connect(self.db_path)
-        try:
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS prompt_texts (
-                    file_path TEXT PRIMARY KEY REFERENCES prompts(file_path),
-                    positive_prompt TEXT,
-                    cleaned_prompt TEXT,
-                    processed BOOLEAN DEFAULT 0,
-                    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-                """
-            )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_cleaned_prompt ON prompt_texts(cleaned_prompt)"
-            )
-            conn.commit()
-        finally:
-            conn.close()
+        Base.metadata.create_all(self.engine)
 
     def has_table(self, table_name: str) -> bool:
-        if not self.db_path.exists():
-            return False
-        conn = sqlite3.connect(self.db_path)
-        try:
-            cur = conn.execute(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?",
-                (table_name,),
-            )
-            return cur.fetchone()[0] > 0
-        finally:
-            conn.close()
+        return inspect(self.engine).has_table(table_name)
 
     def count_rows(self, table_name: str) -> int:
-        if not self.db_path.exists():
-            return 0
-        conn = sqlite3.connect(self.db_path)
-        try:
-            cur = conn.execute(f"SELECT COUNT(*) FROM {table_name}")
-            return int(cur.fetchone()[0])
-        finally:
-            conn.close()
+        with self.engine.begin() as conn:
+            return int(conn.execute(sql_text(f"SELECT COUNT(*) FROM {table_name}")).scalar() or 0)
+
+    def drop_prompt_texts(self) -> None:
+        """Drop the prompt_texts table (fast rebuild path when changing schema)."""
+        with self.engine.begin() as conn:
+            conn.execute(sql_text("DROP TABLE IF EXISTS prompt_texts"))
 
     def get_pending_prompts(self) -> List[Tuple[str, str]]:
         """Return list of (file_path, prompt_json) needing processing."""
-        if not self.db_path.exists():
-            return []
-        conn = sqlite3.connect(self.db_path)
-        try:
-            cursor = conn.execute(
-                """
-                SELECT p.file_path, p.prompt
-                FROM prompts p
-                LEFT JOIN prompt_texts pt ON p.file_path = pt.file_path
-                WHERE pt.file_path IS NULL OR pt.processed IS NULL OR pt.processed = 0
-                """
+        with self.SessionLocal() as session:
+            p = Prompt
+            pt = PromptText
+            stmt = (
+                select(p.file_path, p.prompt)
+                .select_from(p)
+                .outerjoin(pt, p.file_path == pt.file_path)
+                .where((pt.file_path.is_(None)) | (pt.processed.is_(None)) | (pt.processed == False))
             )
-            return cursor.fetchall()
-        finally:
-            conn.close()
+            return [(fp, pr) for fp, pr in session.execute(stmt).all()]
 
     def upsert_prompt_text(self, file_path: str, positive_prompt: str, cleaned_prompt: str):
-        conn = sqlite3.connect(self.db_path)
-        try:
-            cursor = conn.execute("SELECT 1 FROM prompt_texts WHERE file_path = ?", (file_path,))
-            exists = cursor.fetchone() is not None
-            if exists:
-                conn.execute(
-                    """
-                    UPDATE prompt_texts
-                    SET positive_prompt = ?, cleaned_prompt = ?, processed = 1, last_updated = CURRENT_TIMESTAMP
-                    WHERE file_path = ?
-                    """,
-                    (positive_prompt, cleaned_prompt, file_path),
-                )
+        with self.SessionLocal.begin() as session:
+            existing: PromptText | None = session.get(PromptText, file_path)
+            if existing:
+                existing.positive_prompt = positive_prompt
+                existing.cleaned_prompt = cleaned_prompt
+                existing.processed = True
+                existing.last_updated = func.current_timestamp()
             else:
-                conn.execute(
-                    """
-                    INSERT INTO prompt_texts (file_path, positive_prompt, cleaned_prompt, processed)
-                    VALUES (?, ?, ?, 1)
-                    """,
-                    (file_path, positive_prompt, cleaned_prompt),
+                session.add(
+                    PromptText(
+                        file_path=file_path,
+                        positive_prompt=positive_prompt,
+                        cleaned_prompt=cleaned_prompt,
+                        processed=True,
+                    )
                 )
-            conn.commit()
-        finally:
-            conn.close()
+
+    def mark_unprocessed(self, file_path: str):
+        with self.SessionLocal.begin() as session:
+            existing: PromptText | None = session.get(PromptText, file_path)
+            if existing:
+                existing.processed = False
+                existing.last_updated = func.current_timestamp()
+            else:
+                session.add(PromptText(file_path=file_path, processed=False))
 
     def load_prompts(self) -> Tuple[Counter, Dict[str, str]]:
-        """Load processed cleaned prompts and a prompt->image mapping."""
-        if not self.db_path.exists():
-            raise FileNotFoundError(f"Database file not found: {self.db_path}")
+        """
+        Load processed cleaned prompts and a prompt->image mapping.
+        Returns tuple: (Counter-like dict of cleaned prompt counts, mapping cleaned->file_path)
+        """
+        with self.SessionLocal() as session:
+            pt = PromptText
+            rows = session.execute(select(pt.cleaned_prompt, pt.file_path).where(pt.processed == True)).all()
+            cleaned_prompts = [r[0] for r in rows]
+            counts: Counter = Counter(cleaned_prompts)
+            image_paths = {r[0]: r[1] for r in rows}
+            return counts, image_paths
 
-        conn = sqlite3.connect(self.db_path)
-        try:
-            cursor = conn.execute(
-                "SELECT cleaned_prompt, file_path FROM prompt_texts WHERE processed = 1"
-            )
-            rows = cursor.fetchall()
-            cleaned_prompts = [row[0] for row in rows]
-            image_paths = {row[0]: row[1] for row in rows}
-            return Counter(cleaned_prompts), image_paths
-        finally:
-            conn.close()
+    def _escape_like(self, value: str) -> str:
+        """Escape %, _ and backslash for a SQL LIKE pattern (using \\ as escape)."""
+        return (
+            value.replace("\\", "\\\\")
+            .replace("%", r"\%")
+            .replace("_", r"\_")
+        )
 
     def search_positive_prompts(self, query: str, limit: int = 50):
         if not query:
             return []
-        conn = sqlite3.connect(self.db_path)
-        try:
-            sql_query = (
-                """
-                SELECT pt.positive_prompt, pt.file_path
-                FROM prompt_texts pt
-                INNER JOIN (
-                    SELECT positive_prompt, max(last_updated) as max_updated
-                    FROM prompt_texts
-                    WHERE positive_prompt LIKE ?
-                    GROUP BY positive_prompt
-                ) grouped
-                ON pt.positive_prompt = grouped.positive_prompt AND pt.last_updated = grouped.max_updated
-                WHERE pt.positive_prompt LIKE ?
-                ORDER BY pt.last_updated DESC
-                LIMIT ?
-                """
+        with self.SessionLocal() as session:
+            pt = PromptText
+            escaped = self._escape_like(query)
+            like = f"%{escaped}%"
+            grouped = (
+                select(pt.positive_prompt, func.max(pt.last_updated).label("max_updated"))
+                .where(pt.positive_prompt.like(like, escape="\\"))
+                .group_by(pt.positive_prompt)
+                .subquery()
             )
-            search_term = f"%{query}%"
-            cursor = conn.execute(sql_query, (search_term, search_term, limit))
+            stmt = (
+                select(pt.positive_prompt, pt.file_path)
+                .join(
+                    grouped,
+                    (pt.positive_prompt == grouped.c.positive_prompt)
+                    & (pt.last_updated == grouped.c.max_updated),
+                )
+                .where(pt.positive_prompt.like(like, escape="\\"))
+                .order_by(pt.last_updated.desc())
+                .limit(limit)
+            )
             return [
-                {"file_path": row[1], "positive_prompt": row[0]} for row in cursor.fetchall()
+                {"file_path": row[1], "positive_prompt": row[0]} for row in session.execute(stmt).all()
             ]
-        finally:
-            conn.close()
 
     def get_positive_prompts(self, file_paths: List[str]) -> Dict[str, str]:
         if not file_paths:
             return {}
-        conn = sqlite3.connect(self.db_path)
-        try:
-            placeholders = ",".join("?" for _ in file_paths)
-            query = f"SELECT file_path, positive_prompt FROM prompt_texts WHERE file_path IN ({placeholders})"
-            cursor = conn.execute(query, file_paths)
-            return {row[0]: row[1] for row in cursor}
-        finally:
-            conn.close()
+        with self.SessionLocal() as session:
+            pt = PromptText
+            rows = session.execute(select(pt.file_path, pt.positive_prompt).where(pt.file_path.in_(file_paths))).all()
+            return {fp: pos for fp, pos in rows}
 
     def get_image_paths(self, prompt_texts: List[str]) -> Dict[str, str]:
         if not prompt_texts:
             return {}
-        conn = sqlite3.connect(self.db_path)
-        try:
-            placeholders = ",".join("?" for _ in prompt_texts)
-            query = f"SELECT cleaned_prompt, file_path FROM prompt_texts WHERE cleaned_prompt IN ({placeholders})"
-            cursor = conn.execute(query, prompt_texts)
-            return {row[0]: row[1] for row in cursor}
-        finally:
-            conn.close()
+        with self.SessionLocal() as session:
+            pt = PromptText
+            rows = session.execute(select(pt.cleaned_prompt, pt.file_path).where(pt.cleaned_prompt.in_(prompt_texts))).all()
+            return {cp: fp for cp, fp in rows}
