@@ -35,7 +35,6 @@ class PromptProcessor:
             return stats
 
         for i, (file_path, prompt_json) in enumerate(pending, start=1):
-            # Update progress occasionally
             if total > 0:
                 progress(min(0.99, i / total), f"Processing prompts {i}/{total}")
 
@@ -44,14 +43,11 @@ class PromptProcessor:
                 try:
                     positive = extract_positive_prompt(prompt)
                 except Exception:
-                    # Could not extract a positive prompt; mark unprocessed for audit
                     stats.failed_extract += 1
-                    self.db.mark_unprocessed(file_path)
                     continue
 
                 if not positive:
                     stats.failed_extract += 1
-                    self.db.mark_unprocessed(file_path)
                     continue
 
                 cleaned = clean_prompt(positive)
@@ -59,7 +55,6 @@ class PromptProcessor:
                 stats.processed += 1
             except Exception:
                 stats.errors += 1
-                self.db.mark_unprocessed(file_path)
 
         progress(1.0, f"Processed {stats.processed}, failed {stats.failed_extract}, errors {stats.errors}")
         return stats

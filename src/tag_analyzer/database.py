@@ -17,7 +17,6 @@ class TagDatabase:
 
         self.ensure_schema()
 
-    # ---------- schema ----------
     def ensure_schema(self):
         conn = sqlite3.connect(self.db_path)
         try:
@@ -62,7 +61,6 @@ class TagDatabase:
         finally:
             conn.close()
 
-    # ---------- selection for processing ----------
     def get_pending_prompts(self) -> List[Tuple[str, str]]:
         """Return list of (file_path, prompt_json) needing processing."""
         if not self.db_path.exists():
@@ -81,7 +79,6 @@ class TagDatabase:
         finally:
             conn.close()
 
-    # ---------- upserts ----------
     def upsert_prompt_text(self, file_path: str, positive_prompt: str, cleaned_prompt: str):
         conn = sqlite3.connect(self.db_path)
         try:
@@ -108,22 +105,6 @@ class TagDatabase:
         finally:
             conn.close()
 
-    def mark_unprocessed(self, file_path: str):
-        conn = sqlite3.connect(self.db_path)
-        try:
-            conn.execute(
-                """
-                INSERT INTO prompt_texts (file_path, processed)
-                VALUES (?, 0)
-                ON CONFLICT(file_path) DO UPDATE SET processed = 0, last_updated = CURRENT_TIMESTAMP
-                """,
-                (file_path,),
-            )
-            conn.commit()
-        finally:
-            conn.close()
-
-    # ---------- query helpers ----------
     def load_prompts(self) -> Tuple[Counter, Dict[str, str]]:
         """Load processed cleaned prompts and a prompt->image mapping."""
         if not self.db_path.exists():
