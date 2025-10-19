@@ -45,17 +45,18 @@ class Prompt(Base):
 
 class PromptText(Base):
     __tablename__ = "prompt_texts"
-    # Surrogate key for fast random selection and stable ordering
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
     # Reference to source image/prompt
     file_path: Mapped[str] = mapped_column(String, ForeignKey("prompts.file_path"), unique=True, index=True)
+
+    # Surrogate key for fast random selection
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
     # Usually matches filename
     name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     # Core prompts
-    positive_prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    positive_prompt: Mapped[str] = mapped_column(Text)
     negative_prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     cleaned_prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
@@ -153,18 +154,15 @@ class TagDatabase:
                 payload.update({k: v for k, v in extras.items() if hasattr(PromptText, k)})
                 session.add(PromptText(**payload))
 
-    def load_prompts(self) -> Tuple[Counter, Dict[str, str]]:
+    def load_prompts(self) -> List[Tuple[str, str]]:
         """
         Load processed cleaned prompts and a prompt->image mapping.
-        Returns tuple: (Counter-like dict of cleaned prompt counts, mapping cleaned->file_path)
+        Returns list of tuples: (cleaned_prompt, file_path)
         """
         with self.SessionLocal() as session:
             pt = PromptText
-            rows = session.execute(select(pt.cleaned_prompt, pt.file_path)).all()
-            cleaned_prompts = [r[0] for r in rows]
-            counts: Counter = Counter(cleaned_prompts)
-            image_paths = {r[0]: r[1] for r in rows}
-            return counts, image_paths
+            rows = session.execute(select(pt.positive_prompt, pt.file_path)).tuples()
+            return [r for r in rows]
 
     def _escape_like(self, value: str) -> str:
         """Escape %, _ and backslash for a SQL LIKE pattern (using \\ as escape)."""

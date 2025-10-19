@@ -4,12 +4,14 @@ import json
 from dataclasses import dataclass
 from typing import Callable
 from pathlib import Path
+from collections import Counter
 
 from lib.prompt_parser import clean_prompt
 from lib.comfy_analysis import extract_positive_prompt
 
 from .database import TagDatabase
 from .utils import noCallback
+from .prompt_data import PromptData
 
 
 @dataclass
@@ -59,36 +61,24 @@ class PromptProcessor:
         progress(1.0, f"Processed {stats.processed}, failed {stats.failed_extract}, errors {stats.errors}")
         return stats
 
-    def initialize_prompt_data(self, db_path: Path, progress: Callable = noCallback):
-        """End-to-end flow used by UI/CLI without embedding SQL here.
-
-        - Ensures schema
-        - Optional diagnostics
-        - Processes pending prompts
-        - Loads processed prompts using TagDatabase
-        Returns (PromptData, TagDatabase)
+    def process_new_prompts(self, progress: Callable = noCallback):
         """
-        from .prompt_data import PromptData  # lazy import to avoid cycles
+        - Ensure schema
+        - Process pending prompts
+        """
+        if not self.db.has_table("prompts"):
+            raise Exception("'prompts' table does not exist in the database!")
 
-        progress(0.05, "Opening database...")
-        db = self.db if self.db else TagDatabase(db_path)
-
-        if not db.has_table("prompt_texts"):
+        if not self.db.has_table("prompt_texts"):
             print("Creating 'prompt_texts' table...")
-            db.ensure_schema()
-
-        if db.has_table("prompts"):
-            count = db.count_rows("prompts")
-            print(f"Found {count} entries in the prompts table")
-        else:
-            print("WARNING: 'prompts' table does not exist in the database!")
-
-        progress(0.2, "Processing pending prompts...")
+            self.db.ensure_schema()
         self.process_pending(progress)
 
-        progress(0.7, "Loading processed prompts...")
-        prompts_counter, image_paths = db.load_prompts()
-        prompt_texts = list(prompts_counter.keys())
-        progress(0.95, f"Loaded {len(prompt_texts)} unique prompts")
-
-        return PromptData(prompt_texts, prompts_counter, image_paths), db
+    def load_prompts(self) -> PromptData:
+        prompts = self.db.load_prompts()
+        prompt_texts = [p[0] for p in prompts]
+        return PromptData(
+            prompt_texts=prompt_texts,
+            image_paths={p[0]: p[1] for p in prompts},
+            prompts_counter=Counter(prompt_texts)
+        )

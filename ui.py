@@ -10,7 +10,7 @@ from src.ui.direct_search_tab import create_direct_search_tab
 from src.ui.comfy_prompt_extractor_tab import create_comfy_prompt_extractor_tab
 from src.tag_analyzer.prompt_data import PromptData
 from src.tag_analyzer.controller import PromptProcessor
-from src.tag_analyzer import create_analyzer
+from src.tag_analyzer.tag_analyzer import create_analyzer
 from src.tag_analyzer.database import TagDatabase
 
 # Default paths - these will be overridable via the UI
@@ -76,19 +76,21 @@ with gr.Blocks() as app:
     def handle_load(db_path_str, data_dir_str, progress=gr.Progress()):
         try:
             # Convert strings to Path objects
-            db_path_obj = Path(db_path_str)
-            data_dir_obj = Path(data_dir_str)
+            db_path = Path(db_path_str)
+            data_path = Path(data_dir_str)
 
             # Initialize prompt data with progress updates
             progress(0.1, "Loading prompt data...")
             # Initialize via controller (keeps SQL out of PromptData)
-            processor = PromptProcessor(TagDatabase(db_path_obj))
-            prompt_data, db = processor.initialize_prompt_data(db_path_obj, progress)
+            db = TagDatabase(db_path)
+            processor = PromptProcessor(db)
+            processor.process_new_prompts(progress)
+            prompt_data = processor.load_prompts()
             progress(0.5, "Creating analyzer...")
 
             # Initialize analyzer without computing analysis yet
             status_msg, analyzer = initialize_analyzer(
-                data_dir=data_dir_obj,
+                data_dir=data_path,
                 prompt_data=prompt_data,
                 db=db,
                 progress=progress
