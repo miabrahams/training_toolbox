@@ -23,29 +23,29 @@ def reset_prompt_fields(db: TagDatabase):
     print("Prompt fields table reset.")
 
 
-
 def main():
     parser = argparse.ArgumentParser(description="Prompt DB maintenance and processing")
-    subparsers = parser.add_subparsers(dest="command")
-
-    # Shared --db arg at the root level for simplicity
     parser.add_argument(
         "--db", dest="db_path", type=Path, default=Path("data/prompts.sqlite"), help="Path to SQLite database"
     )
 
+    subparsers = parser.add_subparsers(dest="command")
     _ = subparsers.add_parser('reset_prompt_fields')
 
+    export_parser = subparsers.add_parser('export_prompt_fields')
+    export_parser.add_argument('--out', dest='out_path', type=Path, required=True, help='Output SQLite file path')
     args = parser.parse_args()
 
     db = TagDatabase(args.db_path)
-
     progress = lambda x, y: print(f"Progress: {x*100:.1f}% - {y}")
-
 
     # Dispatch based on command; default to processing when no command given
     match args.command:
         case "reset_prompt_fields":
             reset_prompt_fields(db)
+            return
+        case "export_prompt_fields":
+            db.export_prompt_fields(args.out_path)
             return
         case _:
             # Default: ensure schema and process pending prompts

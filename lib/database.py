@@ -15,6 +15,7 @@ from sqlalchemy import (
     func,
     inspect,
     select,
+    insert,
     text as sql_text,
 )
 from sqlalchemy.orm import (
@@ -26,6 +27,8 @@ from sqlalchemy.orm import (
     Session,
 )
 
+from sqlalchemy.sql.schema import Table as SATable
+from typing import cast
 
 class Base(DeclarativeBase):
     pass
@@ -100,8 +103,8 @@ class TagDatabase:
 
     def __init__(self, db_path: Path = Path("data/prompts.sqlite")):
         self.db_path = db_path
-        self.engine = create_engine(f"sqlite:///{db_path}", future=True)
-        self.SessionLocal = sessionmaker(bind=self.engine, future=True, class_=Session)
+        self.engine = create_engine(f"sqlite:///{db_path}")
+        self.SessionLocal = sessionmaker(bind=self.engine, class_=Session)
 
     def ensure_schema(self):
         Base.metadata.create_all(self.engine)
@@ -205,6 +208,32 @@ class TagDatabase:
             .replace("%", r"\%")
             .replace("_", r"\_")
         )
+
+    def export_prompt_fields(self, out_path: Path) -> None:
+        """Export all fields of the prompt_fields table to a new SQLite database.
+
+        Creates the database if it does not exist. May overwrite existing data.
+        """
+        dest_engine = create_engine(f"sqlite:///{out_path}")
+        DestSession = sessionmaker(bind=dest_engine, class_=Session)
+
+        pf_table = cast(SATable, PromptFields.__table__)
+        pf_table.create(bind=dest_engine, checkfirst=True)
+
+        with self.SessionLocal() as src_sess, DestSession.begin() as dest_sess:
+            rows = src_sess.execute(select(PromptFields)).scalars().all()
+            if not rows:
+                print("No rows found in prompt_fields to export.")
+                return
+
+            cols = [c.name for c in PromptFields.__table__.columns]
+            payload = []
+            for r in rows:
+                payload.append({c: getattr(r, c) for c in cols})
+
+            dest_sess.execute(insert(PromptFields), payload)
+            print(f"Exported {len(payload)} rows to {out_path}")
+
 
     def search_positive_prompts(self, query: str, limit: int = 50):
         if not query:
