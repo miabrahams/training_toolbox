@@ -2,6 +2,7 @@ import re
 import json
 from typing import Any
 from PIL import Image, PngImagePlugin
+from pathlib import Path
 from itertools import islice
 import io
 import base64
@@ -108,7 +109,7 @@ def tags_from_metadata(metadata):
         tags.append(tags_item)
     return tags
 
-def raw_image_info(filename: str) -> dict[str | tuple[int, int], Any]:
+def raw_image_info(filename: Path) -> dict[str | tuple[int, int], Any]:
     img = Image.open(filename)
     _ = img.load() # TODO what is the return value?
     return img.info
@@ -128,13 +129,13 @@ def raw_image_info_orig(filename: str) -> dict[str, str]:
 
 
 # Read PIL image metadata
-def info_from_file(filename: str) -> dict:
+def info_from_file(filename: Path) -> dict:
     info = raw_image_info(filename)
     if info is None:
-        raise Exception("No metadata found in file " + filename)
+        raise Exception("No metadata found in file " + str(filename))
     return info['parameters']
 
-def metadata_from_file(filename: str) -> dict:
+def metadata_from_file(filename: Path) -> dict:
     info = info_from_file(filename)
     return parse_metadata(info)
 
@@ -183,17 +184,17 @@ def comfy_metadata(image_info: dict) -> tuple[dict[str, Any], dict[str, Any]]:
     workflow = json.loads(image_info['workflow'])
     return prompt, workflow
 
-def read_comfy_metadata(filename: str) -> tuple[dict[str, Any], dict[str, Any]]:
+def read_comfy_metadata(filename: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     image_info = raw_image_info(filename)
     return comfy_metadata(image_info)
 
-def comfy_prompt(filename: str) -> dict[str, dict[str, Any]]:
+def comfy_prompt(filename: Path) -> dict[str, dict[str, Any]]:
     return json.loads(raw_image_info(filename)['prompt'])
 
-def comfy_nodes(filename: str) -> dict[str, dict[str, Any]]:
+def comfy_nodes(filename: Path) -> dict[str, dict[str, Any]]:
     return {id: value for (id, value) in comfy_prompt(filename).items()}
 
-def comfy_unique_node_types(filename: str) -> list[str]:
+def comfy_unique_node_types(filename: Path) -> list[str]:
     node_types = [value['class_type'] for value in comfy_prompt(filename).values()]
     return sorted(set(node_types))
 

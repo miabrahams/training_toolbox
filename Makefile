@@ -1,4 +1,4 @@
-.PHONY: analysis
+.PHONY: analysis clean
 
 load_prompts:
 	cd golang && go run cmd/load/main.go -db ../data/prompts.sqlite -dir ~/ComfyUI/output
@@ -8,3 +8,6 @@ analysis:
 
 analysis_screen:
 	python tagging/comfy_mass_analysis.py --screen-dir /home/abrahams/ComfyUI/output/NoobAI-XL-eps-v1.1
+
+clean:
+	rm -rf .pytest_cache build dist *.egg-info __pycache__ .mypy_cache .ruff_cache *.pyc uv.lock

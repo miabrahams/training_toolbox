@@ -57,7 +57,7 @@ class PromptText(Base):
     # Core prompts
     positive_prompt: Mapped[str] = mapped_column(Text)
     negative_prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    cleaned_prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    cleaned_prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True) # positive prompt without "masterpiece" etc.
 
     # Resolution
     width: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
