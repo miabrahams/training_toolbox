@@ -9,7 +9,7 @@ from collections import Counter
 from lib.prompt_parser import clean_prompt
 from lib.comfy_schemas.comfy_analysis import extract_positive_prompt
 
-from .database import TagDatabase
+from ...lib.database import TagDatabase
 from .utils import noCallback
 from .prompt_data import PromptData
 

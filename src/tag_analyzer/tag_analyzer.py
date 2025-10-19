@@ -14,7 +14,7 @@ import hdbscan
 
 from lib.prompt_parser import extract_tags_from_prompts
 from .tag_analysis_data import TagAnalysisData
-from .database import TagDatabase
+from ...lib.database import TagDatabase
 
 from .types import (
     SearchResult, SearchResults, ClusterStats, ClusterSummary, ClusterSummaryResults,

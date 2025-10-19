@@ -2,7 +2,7 @@ import gradio as gr
 import time
 from typing import Dict, Any
 
-from src.tag_analyzer.database import TagDatabase
+from lib.database import TagDatabase
 
 def direct_search(db: TagDatabase | None, query: str, limit: int = 100):
     """Search prompts directly from the database"""

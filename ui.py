@@ -11,7 +11,7 @@ from src.ui.comfy_prompt_extractor_tab import create_comfy_prompt_extractor_tab
 from src.tag_analyzer.prompt_data import PromptData
 from src.tag_analyzer.processor import PromptProcessor
 from src.tag_analyzer.tag_analyzer import create_analyzer
-from src.tag_analyzer.database import TagDatabase
+from lib.database import TagDatabase
 
 # Default paths - these will be overridable via the UI
 default_db_path = "data/prompts.sqlite"

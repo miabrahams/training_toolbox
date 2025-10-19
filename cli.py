@@ -12,7 +12,7 @@ Usage examples:
 from pathlib import Path
 import argparse
 
-from src.tag_analyzer.database import TagDatabase
+from lib.database import TagDatabase
 from src.tag_analyzer.processor import PromptProcessor
 
 
