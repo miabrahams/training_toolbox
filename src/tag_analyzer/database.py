@@ -7,6 +7,8 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
+    Float,
     String,
     Text,
     create_engine,
@@ -43,16 +45,50 @@ class Prompt(Base):
 
 class PromptText(Base):
     __tablename__ = "prompt_texts"
-    file_path: Mapped[str] = mapped_column(String, ForeignKey("prompts.file_path"), primary_key=True)
+    # Surrogate key for fast random selection and stable ordering
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    # Reference to source image/prompt
+    file_path: Mapped[str] = mapped_column(String, ForeignKey("prompts.file_path"), unique=True, index=True)
+
+    # Usually matches filename
+    name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
+    # Core prompts
     positive_prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    negative_prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     cleaned_prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    processed: Mapped[Optional[bool]] = mapped_column(Boolean, default=False, nullable=True)
+
+    # Resolution
+    width: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    height: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+    # LoRAs (raw string)
+    loras: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Sampler settings
+    steps: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    cfg: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    sampler_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    scheduler: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
+    rescale_cfg: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    perp_neg: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+
+    # IP Adapter
+    ip_image: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    ip_weight: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    ip_enabled: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+
+    # Processing bookkeeping
+    processed: Mapped[int] = mapped_column(Integer, default=False, nullable=False) # 0 for partially processed, 1 for fully processed.
     last_updated: Mapped[datetime] = mapped_column(DateTime, server_default=func.current_timestamp())
 
     prompt: Mapped["Prompt"] = relationship(back_populates="prompt_text")
 
 
 Index("idx_cleaned_prompt", PromptText.cleaned_prompt)
+Index("idx_positive_prompt", PromptText.positive_prompt)
 
 
 class TagDatabase:
@@ -87,36 +123,35 @@ class TagDatabase:
                 select(p.file_path, p.prompt)
                 .select_from(p)
                 .outerjoin(pt, p.file_path == pt.file_path)
-                .where((pt.file_path.is_(None)) | (pt.processed.is_(None)) | (pt.processed == False))
+                .where((pt.file_path.is_(None)) | (pt.processed.is_(None)) | (pt.processed == 0))
             )
             return [(fp, pr) for fp, pr in session.execute(stmt).all()]
 
-    def upsert_prompt_text(self, file_path: str, positive_prompt: str, cleaned_prompt: str):
+    def upsert_prompt_text(self, file_path: str, positive_prompt: str, cleaned_prompt: str, **extras):
+        """Upsert core prompt fields; extras may include any PromptText columns."""
         with self.SessionLocal.begin() as session:
-            existing: PromptText | None = session.get(PromptText, file_path)
+            existing: Optional[PromptText] = (
+                session.execute(
+                    select(PromptText).where(PromptText.file_path == file_path)
+                ).scalar_one_or_none()
+            )
             if existing:
                 existing.positive_prompt = positive_prompt
                 existing.cleaned_prompt = cleaned_prompt
-                existing.processed = True
+                for k, v in extras.items():
+                    if hasattr(existing, k):
+                        setattr(existing, k, v)
+                existing.processed = 1
                 existing.last_updated = func.current_timestamp()
             else:
-                session.add(
-                    PromptText(
-                        file_path=file_path,
-                        positive_prompt=positive_prompt,
-                        cleaned_prompt=cleaned_prompt,
-                        processed=True,
-                    )
+                payload = dict(
+                    file_path=file_path,
+                    positive_prompt=positive_prompt,
+                    cleaned_prompt=cleaned_prompt,
+                    processed=1,
                 )
-
-    def mark_unprocessed(self, file_path: str):
-        with self.SessionLocal.begin() as session:
-            existing: PromptText | None = session.get(PromptText, file_path)
-            if existing:
-                existing.processed = False
-                existing.last_updated = func.current_timestamp()
-            else:
-                session.add(PromptText(file_path=file_path, processed=False))
+                payload.update({k: v for k, v in extras.items() if hasattr(PromptText, k)})
+                session.add(PromptText(**payload))
 
     def load_prompts(self) -> Tuple[Counter, Dict[str, str]]:
         """
@@ -125,7 +160,7 @@ class TagDatabase:
         """
         with self.SessionLocal() as session:
             pt = PromptText
-            rows = session.execute(select(pt.cleaned_prompt, pt.file_path).where(pt.processed == True)).all()
+            rows = session.execute(select(pt.cleaned_prompt, pt.file_path)).all()
             cleaned_prompts = [r[0] for r in rows]
             counts: Counter = Counter(cleaned_prompts)
             image_paths = {r[0]: r[1] for r in rows}
