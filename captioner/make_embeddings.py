@@ -12,7 +12,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from lib.config import load_configs
+from lib.config import load_config, load_secrets
 
 
 
@@ -100,7 +100,8 @@ def to_polars_parquet(
 
 def main() -> None:
     repo_root = REPO_ROOT
-    cfg, secrets = load_configs(repo_root)
+    cfg = load_config(repo_root)
+    secrets = load_secrets(repo_root)
 
     # Inputs
     captions_path_str = OmegaConf.select(

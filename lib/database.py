@@ -27,8 +27,6 @@ from sqlalchemy.orm import (
     Session,
 )
 
-from sqlalchemy.sql.schema import Table as SATable
-from typing import cast
 
 class Base(DeclarativeBase):
     pass
@@ -217,9 +215,6 @@ class TagDatabase:
         dest_engine = create_engine(f"sqlite:///{out_path}")
         DestSession = sessionmaker(bind=dest_engine, class_=Session)
 
-        pf_table = cast(SATable, PromptFields.__table__)
-        pf_table.create(bind=dest_engine, checkfirst=True)
-
         with self.SessionLocal() as src_sess, DestSession.begin() as dest_sess:
             rows = src_sess.execute(select(PromptFields)).scalars().all()
             if not rows:
@@ -233,6 +228,7 @@ class TagDatabase:
 
             dest_sess.execute(insert(PromptFields), payload)
             print(f"Exported {len(payload)} rows to {out_path}")
+
 
 
     def search_positive_prompts(self, query: str, limit: int = 50):

@@ -6,7 +6,7 @@ from typing import Any, Dict
 import pytest
 
 from lib.metadata import read_comfy_metadata
-from lib.comfy_schemas.comfy_analysis_v3 import extract_from_prompt
+from lib.comfy_schemas.comfy_analysis_v2 import extract_from_prompt
 
 
 ROOT = Path(__file__).resolve().parents[3]

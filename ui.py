@@ -13,9 +13,7 @@ from src.tag_analyzer.processor import PromptProcessor
 from src.tag_analyzer.tag_analyzer import create_analyzer
 from lib.database import TagDatabase
 
-# Default paths - these will be overridable via the UI
-default_db_path = "data/prompts.sqlite"
-default_data_dir = "data"
+from lib.config import load_config
 
 
 # The analyzer is designed to support GUI and TUI front-ends, so initialization functions are separated.
@@ -45,6 +43,7 @@ def initialize_analyzer(data_dir: Path, prompt_data: PromptData, db: TagDatabase
 
 
 with gr.Blocks() as app:
+    ui_config = load_config(Path(__file__).parent / "config")
     # Top level configuration section
     with gr.Row():
         with gr.Column(scale=2):
@@ -55,13 +54,13 @@ with gr.Blocks() as app:
             with gr.Row():
                 db_path = gr.Textbox(
                     label="Database Path",
-                    value=default_db_path,
+                    value=ui_config.get("defaults.db_path"),
                     info="Path to SQLite database with prompts"
                 )
 
                 data_dir = gr.Textbox(
                     label="Data Directory",
-                    value=default_data_dir,
+                    value=ui_config.get("defaults.data_dir"),
                     info="Directory to save/load analysis data"
                 )
 
