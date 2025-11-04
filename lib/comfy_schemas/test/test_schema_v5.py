@@ -9,6 +9,7 @@ from lib.metadata import read_comfy_metadata
 from lib.comfy_schemas.comfy_analysis_v2 import extract_from_prompt
 
 
+# TODO: better relative pathing...
 ROOT = Path(__file__).resolve().parents[3]
 SCHEMA_PATH = ROOT / "lib" / "comfy_schemas" / "schemas" / "schema_v5.yml"
 EXPORT_PATH = ROOT / "lib" / "comfy_schemas" / "test" / "data" / "test_schema_v5.png"

@@ -9,6 +9,7 @@ import skimage.io
 nComparison = 5
 
 # Textures directory
+# TODO: Config driven
 BASE_PATH = "E:/AI/Training/LoRAs/Foxes"
 
 

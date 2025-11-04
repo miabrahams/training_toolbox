@@ -16,7 +16,7 @@ from lib.config import load_config, load_secrets
 
 
 
-# todo: move to secrets
+# TODO: move to secrets
 def find_openai_api_key(config: DictConfig, secrets: Optional[DictConfig] = None) -> Optional[str]:
     env_key = os.getenv("OPENAI_API_KEY")
     if env_key:

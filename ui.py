@@ -123,6 +123,7 @@ with gr.Blocks() as app:
         # Add direct search tab
         direct_search_components = create_direct_search_tab(db_state)
 
+# TODO: load/share config here for port
 def main() -> None:
     """Launch the Gradio interface for the training toolbox."""
     app.launch(server_port=7000)

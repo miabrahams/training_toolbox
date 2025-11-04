@@ -59,6 +59,7 @@ def export_prompt_fields(db: TagDatabase, out_path: Path):
         print(f"Exported {len(payload)} rows to {out_path}")
 
 
+# TODO: Set defaults with config
 def main():
     parser = argparse.ArgumentParser(description="Prompt DB maintenance and processing")
     subparsers = parser.add_subparsers(dest="command")

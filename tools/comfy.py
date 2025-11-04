@@ -11,7 +11,7 @@ from lib.comfy_schemas.comfy_analysis import ComfyImage, fileToComfyImage, Schem
 pp = pprint.PrettyPrinter()
 # Test single image
 
-# TODO: Use sqlite dump
+# TODO: Config
 data_path = Path('data/')
 
 images = [img for img in os.listdir(data_path) if img[-4:] == '.png']

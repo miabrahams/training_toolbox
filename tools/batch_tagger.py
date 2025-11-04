@@ -5,6 +5,7 @@ from torchvision.transforms import transforms
 from pathlib import Path
 import concurrent.futures
 
+# TODO: Configuration
 MODEL_PATH = "models/eva02.pth"
 TAGS_PATH = "models/tags_8041_eva02.json"
 
