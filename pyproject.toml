@@ -1,0 +1,42 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "training-toolbox"
+version = "0.2.0"
+description = "Unified automation agents for prompt analysis, caption curation, and dataset tooling."
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [{ name = "Training Toolbox Maintainers" }]
+dependencies = [
+  "gradio>=4.0",
+  "numpy>=1.24",
+  "sentence-transformers>=3.0",
+  "scikit-learn>=1.3",
+  "umap-learn>=0.5",
+  "hdbscan>=0.8",
+  "ffmpeg-python>=0.2",
+  "sqlalchemy>=2.0",
+  "omegaconf>=2.3",
+  "pyyaml>=6.0",
+  "send2trash>=1.8.3",
+  "pillow>=10.0",
+  "tqdm>=4.65",
+  "pandas>=2.0",
+  "imagehash>=4.3",
+  "scikit-image>=0.22",
+]
+
+[project.optional-dependencies]
+captioner = ["google-genai==1.31.0", "openai>=1.0.0", "polars>=0.20"]
+duplicates = ["matplotlib>=3.8", "cupy>=12.0"]
+youtube = ["youtube-transcript-api>=0.6"]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+training-toolbox = "python -m cli"
+training-toolbox-ui = "python -m ui"
+
+[tool.uv]
+package = false

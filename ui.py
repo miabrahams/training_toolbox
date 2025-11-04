@@ -123,5 +123,10 @@ with gr.Blocks() as app:
         # Add direct search tab
         direct_search_components = create_direct_search_tab(db_state)
 
-if __name__ == "__main__":
+def main() -> None:
+    """Launch the Gradio interface for the training toolbox."""
     app.launch(server_port=7000)
+
+
+if __name__ == "__main__":
+    main()

@@ -14,7 +14,7 @@ import hdbscan
 
 from lib.prompt_parser import extract_tags_from_prompts
 from .tag_analysis_data import TagAnalysisData
-from ...lib.database import TagDatabase
+from lib.database import TagDatabase
 
 from .types import (
     SearchResult, SearchResults, ClusterStats, ClusterSummary, ClusterSummaryResults,
@@ -155,13 +155,13 @@ class TagAnalyzer:
 
     def _reduce_dimensions(self, embeddings: np.ndarray, n_components: int = 2) -> np.ndarray:
         """Reduce dimensionality of embeddings using UMAP."""
-        reducer = umap.UMAP( # type: ignore
+        reducer = umap.UMAP(
             n_components=n_components,
             n_neighbors=15,
             min_dist=0.1,
             metric='cosine'
         )
-        return reducer.fit_transform(embeddings)
+        return reducer.fit_transform(embeddings) # type: ignore
 
     def _cluster_embeddings(self, embeddings: np.ndarray, min_cluster_size: int = 5) -> np.ndarray:
         """Cluster embeddings using HDBSCAN."""

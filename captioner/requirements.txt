@@ -1,5 +1,0 @@
-google-genai==1.31.0
-imagehash==4.3.2
-openai
-polars
-OmegaConf

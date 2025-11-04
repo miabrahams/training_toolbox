@@ -2,6 +2,7 @@
 data
 converted_checkpoints
 node_modules
+.uv-cache
 
 *.pyc
 .venv

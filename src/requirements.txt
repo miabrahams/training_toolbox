@@ -1,7 +1,0 @@
-gradio
-ffmpeg-python
-umap-learn
-send2trash==1.8.3
-omegaconf
-PyYAML>=6.0
-pytest
