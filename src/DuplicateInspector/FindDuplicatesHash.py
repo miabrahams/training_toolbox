@@ -9,6 +9,11 @@ import shutil
 from send2trash import send2trash
 import pickle
 
+from lib.config import get_settings
+
+settings = get_settings()
+HTML_CFG = settings.get("duplicate_inspector.html", {})
+
 
 
 def generate_image_pairs_html(duplicates_pairs, start_index, end_index):
@@ -179,9 +184,14 @@ def find_duplicates(source_dir, alternates_dir, hash_size, max_distance, keep_la
             print(f"Source: {source_file},  Alternate: {alternate_file}")
         if args.write_html:
             html = generate_image_pairs_html(duplicates, 0, len(duplicates))
-            # TODO: use config
-            html = html.replace("/mnt/d/", "D:/")
-            with open('data/duplicates.html', 'w') as file:
+            rewrite_cfg = HTML_CFG.get("path_rewrite", {})
+            prefix_from = rewrite_cfg.get("from")
+            prefix_to = rewrite_cfg.get("to")
+            if prefix_from and prefix_to:
+                html = html.replace(prefix_from, prefix_to)
+            output_file = HTML_CFG.get("output_file", "data/duplicates.html")
+            Path(output_file).expanduser().parent.mkdir(parents=True, exist_ok=True)
+            with open(output_file, 'w', encoding='utf-8') as file:
                 file.write(html)
     else:
         print("No duplicate images found.")

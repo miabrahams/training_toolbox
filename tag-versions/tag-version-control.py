@@ -7,6 +7,8 @@ from typing import List, Dict, Tuple, Optional
 from tqdm import tqdm
 from collections import Counter
 
+from lib.config import get_settings
+
 class CaptionVersionControl:
     def __init__(self, db_path="caption_versions.db"):
         """Initialize the version control system with a SQLite database."""
@@ -264,8 +266,9 @@ Examples:
         parser.print_help()
         return
 
-    #TODO: Custom database path
-    vc = CaptionVersionControl('bats_caption_versions.db')
+    settings = get_settings()
+    db_path = settings.get("tag_versions.database") or settings.get("tag_versions.parquet")
+    vc = CaptionVersionControl(db_path or 'caption_versions.db')
 
     try:
         if args.command == 'add':

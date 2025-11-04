@@ -1,0 +1,51 @@
+
+ui:
+  server:
+    port: 7000
+  defaults:
+    db_path: "data/prompts.sqlite"
+    data_dir: "data"
+
+log:
+  level: debug
+
+captioner:
+  input_dir:
+  output_dir:
+  error_dir:
+  collator:
+    output_file:
+    postprocess:
+  embeddings:
+    captions_file:
+    parquet:
+    model:
+
+batch_tagger:
+  model_path:
+  tags_path:
+
+duplicate_inspector:
+  base_path:
+  html:
+    output_file:
+    path_rewrite:
+      from: "/mnt/d/"
+      to: "D:/"
+
+tools:
+  check_db:
+    default_path:
+  comfy:
+    data_path:
+
+db:
+  path:
+
+embeddings:
+  parquet:
+  model:
+
+comfy:
+  url:
+  pause_time:

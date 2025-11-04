@@ -13,7 +13,7 @@ from src.tag_analyzer.processor import PromptProcessor
 from src.tag_analyzer.tag_analyzer import create_analyzer
 from lib.database import TagDatabase
 
-from lib.config import load_config
+from lib.config import get_settings
 
 
 # The analyzer is designed to support GUI and TUI front-ends, so initialization functions are separated.
@@ -42,8 +42,10 @@ def initialize_analyzer(data_dir: Path, prompt_data: PromptData, db: TagDatabase
         return f"Error: {str(e)}", None
 
 
+settings = get_settings()
+ui_defaults = settings.get("ui.defaults", {})
+
 with gr.Blocks() as app:
-    ui_config = load_config(Path(__file__).parent / "config")
     # Top level configuration section
     with gr.Row():
         with gr.Column(scale=2):
@@ -54,13 +56,13 @@ with gr.Blocks() as app:
             with gr.Row():
                 db_path = gr.Textbox(
                     label="Database Path",
-                    value=ui_config.get("defaults.db_path"),
+                    value=ui_defaults.get("db_path"),
                     info="Path to SQLite database with prompts"
                 )
 
                 data_dir = gr.Textbox(
                     label="Data Directory",
-                    value=ui_config.get("defaults.data_dir"),
+                    value=ui_defaults.get("data_dir"),
                     info="Directory to save/load analysis data"
                 )
 
@@ -123,10 +125,10 @@ with gr.Blocks() as app:
         # Add direct search tab
         direct_search_components = create_direct_search_tab(db_state)
 
-# TODO: load/share config here for port
-def main() -> None:
+def main(server_port: int | None = None) -> None:
     """Launch the Gradio interface for the training toolbox."""
-    app.launch(server_port=7000)
+    port = server_port or settings.get("ui.server.port", 7000)
+    app.launch(server_port=port)
 
 
 if __name__ == "__main__":

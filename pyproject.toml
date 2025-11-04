@@ -17,6 +17,7 @@ dependencies = [
   "umap-learn>=0.5",
   "hdbscan>=0.8",
   "ffmpeg-python>=0.2",
+  "dynaconf>=3.2",
   "sqlalchemy>=2.0",
   "omegaconf>=2.3",
   "pyyaml>=6.0",
@@ -26,6 +27,11 @@ dependencies = [
   "pandas>=2.0",
   "imagehash>=4.3",
   "scikit-image>=0.22",
+  "openai>=2.7.0",
+  "polars>=1.35.1",
+  "pytest>=8.4.2",
+  "torchvision>=0.24.0",
+  "google-genai>=1.31.0",
 ]
 
 [project.optional-dependencies]

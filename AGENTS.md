@@ -25,10 +25,10 @@ The repository hosts multiple automation-oriented tools ("agents") that support 
 
 ## Tag Analysis Suite
 
-### Gradio UI
 - Orchestrated in `ui.py:1`, which wires tabs for prompt extraction, frame extraction, clustering, and direct SQL views.
 - Tabs are modular (`src/ui/comfy_prompt_extractor_tab.py:1`, `frame_extractor_tab.py:1`, `tag_analysis_tab.py:1`, `prompt_search_tab.py:1`, `direct_search_tab.py:1`) so new functionality drops in by adding another tab factory.
 - Initialization bridges the SQLite prompt DB and cached analysis data (`ui.py:75-121`). Users set the database path, click **Load Data**, and the app lazily computes embeddings unless `Compute Analysis` is triggered from the Tag Analysis tab.
+- UI defaults (server port, initial database/data directories) come from `ui.*` in `config/config.yml` via the shared Dynaconf loader.
 - Dependencies: Gradio, SentenceTransformers, UMAP, HDBSCAN, FFmpeg, numpy. Install with `uv sync` (add `--extra duplicates` when the duplicate inspector features are needed).
 
 ### Prompt Analyzer CLI
@@ -47,18 +47,17 @@ The repository hosts multiple automation-oriented tools ("agents") that support 
 
 ## Caption Processing Agents
 
-### Caption Cleanup (LLM Moderation)
-- Implemented in `captioner/process_captions.py:20-130`. A `CaptionProcessor` client streams captions through Google Gemini (`captioner/process_captions.py:32-70`) and routes flagged items to `./data/errors` while clean ones land in `./data/output`.
-- Requires `CAPTION_API_KEY` in the environment (`captioner/process_captions.py:121-128`) and the `captioner` extra (`uv sync --extra captioner`).
-- Tweak the input/output directories at the top of the script, then run `uv run --extra captioner python captioner/process_captions.py`.
+- Implemented in `captioner/process_captions.py:20-130`. A `CaptionProcessor` client streams captions through Google Gemini (`captioner/process_captions.py:32-70`) and routes flagged items to `captioner.output_dir`/`captioner.error_dir` from config.
+- Requires `CAPTION_API_KEY` (or `captioner.api_key` in secrets) and the `captioner` extra (`uv sync --extra captioner`).
+- Directory locations and collator behaviour are controlled by `captioner.*` in `config/config.yml`; run `uv run --extra captioner python captioner/process_captions.py` or `collate_captions.py` directly.
 
 ### Caption Collator
 - `captioner/collate_captions.py:1-74` walks processed captions, applies regex-based cleanups, and produces a unified `data/collated_captions.txt` file for downstream embedding.
 - Set `POSTPROCESS = True` to enable normalization rules that collapse repetitive descriptors and remove redundant phrases.
 
 ### Caption Embedding Builder
-- `captioner/make_embeddings.py:1-132` loads `config.yml`/`secrets.yml` via `lib/config.py:5-11`, then batches the collated captions through the OpenAI embeddings API (`captioner/make_embeddings.py:70-113`).
-- Outputs a Parquet file containing text + embedding vectors defined in `config.yml` under `embeddings.parquet`.
+- `captioner/make_embeddings.py:1-132` loads the shared Dynaconf settings and then batches the collated captions through the OpenAI embeddings API (`captioner/make_embeddings.py:70-113`).
+- Outputs a Parquet file containing text + embedding vectors defined in `config.yml` under `captioner.embeddings.parquet` (with environment and secrets overrides respected).
 - Requires either `OPENAI_API_KEY` in environment or in `secrets.yml`.
 
 ### Caption Version Control
@@ -71,8 +70,8 @@ The repository hosts multiple automation-oriented tools ("agents") that support 
 - UI tab defined in `src/ui/frame_extractor_tab.py:1-136` uses FFmpeg to sample frames from selected videos, handling WSL path conversion via `lib/wsl_utils.py:5-68`.
 - Backend extraction pipeline lives in `lib/ffmpeg_frames.py:6-37`; CLI usage supported through the same module (`lib/ffmpeg_frames.py:40-64`).
 
-### Duplicate Inspector
 - Toolkit under `src/DuplicateInspector/` provides multiple strategies (hash-based, CuPy-accelerated) for finding duplicate images across datasets. Enable the extras with `uv sync --extra duplicates`.
+- Shared defaults such as the base dataset path and HTML export location live under `duplicate_inspector.*` in `config/config.yml`.
 - Scripts like `FindDuplicates.py` expose command-line entry points; `InspectDuplicates.ipynb` offers exploratory analysis.
 
 ### Comfy Metadata Toolkit
@@ -97,9 +96,7 @@ The repository hosts multiple automation-oriented tools ("agents") that support 
 - **YouTube Transcript Agent** (`youtube_transcript/youtube_transcript.ipynb`) pulls transcripts using the API enabled by `uv sync --extra youtube`.
 - **Numerical Studies** (`numerical/*.ipynb`) contain exploratory analysis for LoRA weights, latent space inspection, and color statistics.
 
-## Shared Configuration & Data
-
-- `config.yml:1-115` and `secrets.yml` store shared settings: database paths, embedding outputs, generation styles, Comfy endpoints, and API keys. Python agents read them via `lib/config.py:5-11`; Go agents use the same file through Koanf.
+- `config/config.yml` and `config/secrets.yml` store shared settings: database paths, embedding outputs, generation styles, Comfy endpoints, and API keys. Python agents read them through `lib.config.get_settings()` (Dynaconf), so notebooks and scripts share identical defaults. Go agents continue to use Koanf against the same files.
 - Datasets and cache artifacts live in `data/` (SQLite DB, numpy arrays, scraped prompts) and `models/` (e.g., EVA CLIP weights). Keep these directories available when running analyzers.
 - Global Python dependencies now live in `pyproject.toml`; run `./install-requirements.sh` (a thin wrapper over `uv sync`) to create or update the environment. Pass extras such as `--extra captioner duplicates` when specialized agents are required.
 

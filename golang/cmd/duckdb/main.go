@@ -23,6 +23,10 @@ func main() {
 	}
 }
 
+var (
+	configPath = "../config/golang-generator.yml"
+)
+
 func run_main() error {
 	ctx := context.Background()
 	level := slog.LevelVar{}
@@ -31,7 +35,7 @@ func run_main() error {
 	)
 	slog.SetDefault(logger)
 
-	k, err := LoadConfig("../config.yml")
+	k, err := LoadConfig(configPath)
 	if err != nil {
 		return err
 	}

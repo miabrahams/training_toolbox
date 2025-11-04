@@ -1,10 +1,14 @@
 from pathlib import Path
 import re
 
+from lib.config import get_settings
 
-# TODO: use config and point to data/captioner/v1 or smth
-output_dir = "./data/output"
-collated_file = "./data/collated_captions.txt"
+
+settings = get_settings()
+captioner_cfg = settings.get("captioner", {})
+collator_cfg = captioner_cfg.get("collator", {})
+output_dir = Path(captioner_cfg.get("output_dir", "./data/output"))
+collated_file = Path(collator_cfg.get("output_file", "./data/collated_captions.txt"))
 
 
 # Combined replacements dictionary:
@@ -49,21 +53,19 @@ def postprocess(caption_text: str) -> str:
 
 
 RUN = True
-POSTPROCESS = True
+POSTPROCESS = bool(collator_cfg.get("postprocess", True))
 if RUN:
     result = []
-    for sub in Path(output_dir).walk():
-        for file in sub[2]:
-            if file.endswith(".txt"):
-                input_path = sub[0] / file
-                with open(input_path, 'r', encoding='utf-8') as f:
-                    caption_text = f.read().replace('\n', ' ')
-                if POSTPROCESS:
-                    caption_text = postprocess(caption_text)
-                caption_text = caption_text.strip()
+    for input_path in output_dir.rglob("*.txt"):
+        with input_path.open('r', encoding='utf-8') as f:
+            caption_text = f.read().replace('\n', ' ')
+        if POSTPROCESS:
+            caption_text = postprocess(caption_text)
+        caption_text = caption_text.strip()
 
-                print(f"Processing {file}: {caption_text[:50]}...")  # Print first 50 chars for brevity
-                result.append(caption_text)
+        print(f"Processing {input_path.name}: {caption_text[:50]}...")  # Print first 50 chars for brevity
+        result.append(caption_text)
 
-    with open(collated_file, 'w', encoding='utf-8') as f:
+    collated_file.parent.mkdir(parents=True, exist_ok=True)
+    with collated_file.open('w', encoding='utf-8') as f:
         f.write("\n".join(result))

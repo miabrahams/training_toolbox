@@ -1,8 +1,12 @@
-import os
 import numpy as np
 import pickle
 from pathlib import Path
 from typing import Optional
+
+from lib.config import get_settings
+
+settings = get_settings()
+ANALYSIS_FILENAME = settings.get("tag_analyzer.analysis_filename", "analysis_data.pkl")
 
 class TagAnalysisData:
     """Class to store and persist tag analysis data."""
@@ -21,16 +25,15 @@ class TagAnalysisData:
         self.embeddings = embeddings
         self.reduced_embeddings = reduced_embeddings
         self.clusters = clusters
-        self.data_dir = data_dir
+        self.data_dir = Path(data_dir)
 
     def _save_analysis_data(self):
         """Save analysis data to disk."""
         # Create directory if it doesn't exist
 
-        # TODO: config with default
-        os.makedirs(self.data_dir, exist_ok=True)
+        self.data_dir.mkdir(parents=True, exist_ok=True)
 
-        data_path = os.path.join(self.data_dir, 'analysis_data.pkl')
+        data_path = self.data_dir / ANALYSIS_FILENAME
 
         data_to_save = {
             'embeddings': self.embeddings,
@@ -54,15 +57,15 @@ class TagAnalysisData:
         Returns:
             TagAnalysisData instance if data exists, None otherwise
         """
-        # TODO: config with default
-        data_path = os.path.join(data_dir, 'analysis_data.pkl')
+        data_dir = Path(data_dir)
+        data_path = data_dir / ANALYSIS_FILENAME
 
-        if not os.path.exists(data_path):
+        if not data_path.exists():
             print(f"No analysis data found at {data_path}")
             return None
 
         try:
-            with open(data_path, 'rb') as f:
+            with data_path.open('rb') as f:
                 data = pickle.load(f)
 
             return cls(
@@ -74,5 +77,3 @@ class TagAnalysisData:
         except Exception as e:
             print(f"Error loading analysis data: {e}")
             return None
-
-

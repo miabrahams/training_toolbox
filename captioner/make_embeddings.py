@@ -5,27 +5,20 @@ from pathlib import Path
 from typing import Iterable, List, Optional
 from openai import OpenAI
 import polars as pl
-from omegaconf import DictConfig, OmegaConf
 
 # Ensure project root on sys.path when running as a script (so 'lib' is importable)
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from lib.config import load_config, load_secrets
+from lib.config import get_settings
 
-
-
-# TODO: move to secrets
-def find_openai_api_key(config: DictConfig, secrets: Optional[DictConfig] = None) -> Optional[str]:
+def find_openai_api_key() -> Optional[str]:
     env_key = os.getenv("OPENAI_API_KEY")
     if env_key:
         return env_key
-    if secrets is not None:
-        sec_key = OmegaConf.select(secrets, "OPENAI_API_KEY")
-        if sec_key:
-            return sec_key
-    return OmegaConf.select(config, "OPENAI_API_KEY")
+    settings = get_settings()
+    return settings.get("openai.api_key") or settings.get("OPENAI_API_KEY")
 
 
 def read_captions(captions_path: Path) -> List[str]:
@@ -100,33 +93,36 @@ def to_polars_parquet(
 
 
 def main() -> None:
-    repo_root = REPO_ROOT
-    cfg = load_config(repo_root)
-    secrets = load_secrets(repo_root)
+    settings = get_settings()
 
     # Inputs
-    # TODO: put these defaults in config.py
-    # TODO: data/captioner/v1
-    captions_path_str = OmegaConf.select(
-        cfg,
-        "data.collated_captions",
-        default=str(repo_root / "captioner" / "data" / "collated_captions.txt"),
+    captions_path_str = (
+        settings.get("captioner.embeddings.captions_file")
+        or settings.get("captioner.collator.output_file")
+        or str(REPO_ROOT / "captioner" / "data" / "collated_captions.txt")
     )
     captions_path = Path(captions_path_str).expanduser().resolve()
 
     # Outputs
-    embeddings_path = OmegaConf.select(cfg, "embeddings.parquet")
+    embeddings_path = (
+        settings.get("captioner.embeddings.parquet")
+        or settings.get("embeddings.parquet")
+    )
     if not embeddings_path:
-        print("Config missing key 'embeddings.parquet' (output path).", file=sys.stderr)
+        print("Config missing key 'captioner.embeddings.parquet' (output path).", file=sys.stderr)
         sys.exit(1)
     out_path = Path(embeddings_path).expanduser().resolve()
 
     # API
-    api_key = find_openai_api_key(cfg, secrets)
+    api_key = find_openai_api_key()
     if not api_key:
         print("OpenAI API key not found. Set OPENAI_API_KEY or add it to secrets.yml.", file=sys.stderr)
         sys.exit(1)
-    model = OmegaConf.select(cfg, "embeddings.model", default="text-embedding-3-large")
+    model = (
+        settings.get("captioner.embeddings.model")
+        or settings.get("embeddings.model")
+        or "text-embedding-3-large"
+    )
 
     # Read captions
     if not captions_path.exists():

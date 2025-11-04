@@ -7,15 +7,17 @@ from google.genai import types
 from tqdm import tqdm
 from logging import getLogger
 
+from lib.config import get_settings, get_path
+
 logger = getLogger(__name__)
 
 MODEL = "gemini-1.5-flash-latest" # Updated to a common Gemini model, adjust if needed
 
-# Configuration
-# TODO: make configurable; defaults data/captioner/v1
-INPUT_DIR = "./data/input"
-OUTPUT_DIR = "./data/output"
-ERROR_DIR = "./data/errors"
+settings = get_settings()
+CAPTIONER_CFG = settings.get("captioner", {})
+INPUT_DIR = CAPTIONER_CFG.get("input_dir", "./data/input")
+OUTPUT_DIR = CAPTIONER_CFG.get("output_dir", "./data/output")
+ERROR_DIR = CAPTIONER_CFG.get("error_dir", "./data/errors")
 
 
 class CaptionProcessor:
@@ -119,8 +121,8 @@ class CaptionProcessor:
 
 def main():
 
-    # Get API key from environment variable
-    api_key = os.getenv("CAPTION_API_KEY") # User already uses this, ensure it's set for Google
+    # Get API key from secrets or environment variable
+    api_key = get_path("captioner.api_key") or os.getenv("CAPTION_API_KEY")
     if not api_key:
         print("Please set CAPTION_API_KEY environment variable with your Google API Key.")
         return

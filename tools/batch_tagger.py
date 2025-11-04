@@ -5,9 +5,11 @@ from torchvision.transforms import transforms
 from pathlib import Path
 import concurrent.futures
 
-# TODO: Configuration
-MODEL_PATH = "models/eva02.pth"
-TAGS_PATH = "models/tags_8041_eva02.json"
+from lib.config import get_settings
+
+settings = get_settings()
+MODEL_PATH = Path(settings.get("batch_tagger.model_path", "models/eva02.pth"))
+TAGS_PATH = Path(settings.get("batch_tagger.tags_path", "models/tags_8041_eva02.json"))
 
 def get_images(folder: Path, subfolders: bool = True):
     if subfolders:

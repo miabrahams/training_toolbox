@@ -9,8 +9,8 @@ Usage examples:
     python cli.py reset_prompt_fields --db data/prompts.sqlite
 """
 
-from pathlib import Path
 import argparse
+from pathlib import Path
 
 from lib.database import TagDatabase, PromptFields
 from sqlalchemy import create_engine, select, insert
@@ -18,6 +18,7 @@ from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.sql.schema import Table as SATable
 from typing import cast
 from src.tag_analyzer.processor import PromptProcessor
+from lib.config import get_settings
 
 
 def reset_prompt_fields(db: TagDatabase):
@@ -59,14 +60,17 @@ def export_prompt_fields(db: TagDatabase, out_path: Path):
         print(f"Exported {len(payload)} rows to {out_path}")
 
 
-# TODO: Set defaults with config
 def main():
+    settings = get_settings()
+    default_db_path = settings.get("ui.defaults.db_path") or settings.get("tools.check_db.default_path")
+    default_db = Path(default_db_path).expanduser() if default_db_path else Path("data/prompts.sqlite")
+
     parser = argparse.ArgumentParser(description="Prompt DB maintenance and processing")
     subparsers = parser.add_subparsers(dest="command")
 
     # Shared --db arg at the root level for simplicity
     parser.add_argument(
-        "--db", dest="db_path", type=Path, default=Path("data/prompts.sqlite"), help="Path to SQLite database"
+        "--db", dest="db_path", type=Path, default=default_db, help="Path to SQLite database"
     )
 
     _ = subparsers.add_parser('reset_prompt_fields')
