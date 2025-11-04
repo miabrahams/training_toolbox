@@ -1,7 +1,7 @@
 from pathlib import Path
 import re
 
-from lib.config import get_settings
+from src.lib.config import get_settings
 
 
 settings = get_settings()

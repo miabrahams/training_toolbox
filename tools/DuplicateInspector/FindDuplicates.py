@@ -6,7 +6,7 @@ import skimage.io
 import skimage.transform
 # import imagehash
 
-from lib.config import get_settings
+from src.lib.config import get_settings
 
 # Number of images to compare
 nComparison = 5

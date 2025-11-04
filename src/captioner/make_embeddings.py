@@ -11,7 +11,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from lib.config import get_settings
+from src.lib.config import get_settings
 
 def find_openai_api_key() -> Optional[str]:
     env_key = os.getenv("OPENAI_API_KEY")

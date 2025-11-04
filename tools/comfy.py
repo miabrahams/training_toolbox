@@ -4,10 +4,10 @@ import pprint
 import json
 from pathlib import Path
 
-from lib.config import get_settings
+from src.lib.config import get_settings
 
-from lib.comfy_schemas.comfy_analysis import ComfyImage, fileToComfyImage, SchemaNode, Schema3, extract_positive_prompt
-# from lib.comfy_analysis import Schema2, get_parent, prompt_schedule_gen05, prompt_schedule_gen04
+from src.lib.comfy_schemas.comfy_analysis import ComfyImage, fileToComfyImage, SchemaNode, Schema3, extract_positive_prompt
+# from src.lib.comfy_analysis import Schema2, get_parent, prompt_schedule_gen05, prompt_schedule_gen04
 
 pp = pprint.PrettyPrinter()
 # Test single image

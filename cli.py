@@ -12,13 +12,13 @@ Usage examples:
 import argparse
 from pathlib import Path
 
-from lib.database import TagDatabase, PromptFields
+from src.lib.database import TagDatabase, PromptFields
 from sqlalchemy import create_engine, select, insert
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.sql.schema import Table as SATable
 from typing import cast
 from src.tag_analyzer.processor import PromptProcessor
-from lib.config import get_settings
+from src.lib.config import get_settings
 
 
 def reset_prompt_fields(db: TagDatabase):

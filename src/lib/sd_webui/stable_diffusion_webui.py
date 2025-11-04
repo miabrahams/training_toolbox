@@ -5,7 +5,7 @@ import aiohttp
 import asyncio
 import logging
 import requests
-from .util import log
+from src.lib.util import log
 from typing import Optional
 
 # POST /sdapi/v1/txt2img

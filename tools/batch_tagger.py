@@ -5,7 +5,7 @@ from torchvision.transforms import transforms
 from pathlib import Path
 import concurrent.futures
 
-from lib.config import get_settings
+from src.lib.config import get_settings
 
 settings = get_settings()
 MODEL_PATH = Path(settings.get("batch_tagger.model_path", "models/eva02.pth"))

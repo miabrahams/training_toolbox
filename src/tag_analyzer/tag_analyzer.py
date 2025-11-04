@@ -12,9 +12,9 @@ from sklearn.preprocessing import normalize
 import umap
 import hdbscan
 
-from lib.prompt_parser import extract_tags_from_prompts
+from src.lib.prompt_parser import extract_tags_from_prompts
 from .tag_analysis_data import TagAnalysisData
-from lib.database import TagDatabase
+from src.lib.database import TagDatabase
 
 from .types import (
     SearchResult, SearchResults, ClusterStats, ClusterSummary, ClusterSummaryResults,

@@ -7,7 +7,7 @@ from typing import List, Dict, Tuple, Optional
 from tqdm import tqdm
 from collections import Counter
 
-from lib.config import get_settings
+from src.lib.config import get_settings
 
 class CaptionVersionControl:
     def __init__(self, db_path="caption_versions.db"):

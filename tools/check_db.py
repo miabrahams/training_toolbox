@@ -5,10 +5,10 @@ import sys
 from pathlib import Path
 import os
 
-from lib.config import get_settings
+from src.lib.config import get_settings
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from lib.comfy_schemas.comfy_analysis import extract_positive_prompt
+from src.lib.comfy_schemas.comfy_analysis import extract_positive_prompt
 
 def check_database(db_path):
     """Check database structure and sample data"""

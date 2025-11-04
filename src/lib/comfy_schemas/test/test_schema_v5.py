@@ -5,8 +5,8 @@ from typing import Any, Dict
 
 import pytest
 
-from lib.metadata import read_comfy_metadata
-from lib.comfy_schemas.comfy_analysis_v2 import extract_from_prompt
+from src.lib.metadata import read_comfy_metadata
+from src.lib.comfy_schemas.comfy_analysis_v2 import extract_from_prompt
 
 
 # TODO: better relative pathing...

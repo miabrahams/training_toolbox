@@ -1,4 +1,4 @@
-from lib.metadata import read_comfy_metadata
+from src.lib.metadata import read_comfy_metadata
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Optional, Tuple
 from copy import deepcopy

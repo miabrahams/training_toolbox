@@ -3,7 +3,7 @@ import pickle
 from pathlib import Path
 from typing import Optional
 
-from lib.config import get_settings
+from src.lib.config import get_settings
 
 settings = get_settings()
 ANALYSIS_FILENAME = settings.get("tag_analyzer.analysis_filename", "analysis_data.pkl")

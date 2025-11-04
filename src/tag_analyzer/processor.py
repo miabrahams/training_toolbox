@@ -6,13 +6,13 @@ from typing import Callable, Any, Dict, Iterable
 from pathlib import Path
 from collections import Counter
 
-from lib.prompt_parser import clean_prompt
-from lib.comfy_schemas.comfy_analysis_v2 import (
+from src.lib.prompt_parser import clean_prompt
+from src.lib.comfy_schemas.comfy_analysis_v2 import (
     extract_from_prompt,
     DEFAULT_SCHEMA_PATH,
 )
 
-from lib.database import TagDatabase
+from src.lib.database import TagDatabase
 from .utils import noCallback
 from .prompt_data import PromptData
 

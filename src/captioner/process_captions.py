@@ -7,7 +7,7 @@ from google.genai import types
 from tqdm import tqdm
 from logging import getLogger
 
-from lib.config import get_settings, get_path
+from src.lib.config import get_settings, get_path
 
 logger = getLogger(__name__)
 

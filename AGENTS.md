@@ -96,7 +96,7 @@ The repository hosts multiple automation-oriented tools ("agents") that support 
 - **YouTube Transcript Agent** (`youtube_transcript/youtube_transcript.ipynb`) pulls transcripts using the API enabled by `uv sync --extra youtube`.
 - **Numerical Studies** (`numerical/*.ipynb`) contain exploratory analysis for LoRA weights, latent space inspection, and color statistics.
 
-- `config/config.yml` and `config/secrets.yml` store shared settings: database paths, embedding outputs, generation styles, Comfy endpoints, and API keys. Python agents read them through `lib.config.get_settings()` (Dynaconf), so notebooks and scripts share identical defaults. Go agents continue to use Koanf against the same files.
+- `config/config.yml` and `config/secrets.yml` store shared settings: database paths, embedding outputs, generation styles, Comfy endpoints, and API keys. Python agents read them through `src.lib.config.get_settings()` (Dynaconf), so notebooks and scripts share identical defaults. Go agents continue to use Koanf against the same files.
 - Datasets and cache artifacts live in `data/` (SQLite DB, numpy arrays, scraped prompts) and `models/` (e.g., EVA CLIP weights). Keep these directories available when running analyzers.
 - Global Python dependencies now live in `pyproject.toml`; run `./install-requirements.sh` (a thin wrapper over `uv sync`) to create or update the environment. Pass extras such as `--extra captioner duplicates` when specialized agents are required.
 

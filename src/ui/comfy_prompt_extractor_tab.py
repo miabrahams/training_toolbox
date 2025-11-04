@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 from typing import Optional, Tuple
 
-from lib.comfy_schemas.comfy_analysis import fileToComfyImage, extract_positive_prompt, extract_negative_prompt
+from src.lib.comfy_schemas.comfy_analysis import fileToComfyImage, extract_positive_prompt, extract_negative_prompt
 
 
 def extract_prompts_from_image(image_path: Path) -> Tuple[str, str, str]:

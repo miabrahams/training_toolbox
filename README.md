@@ -2,7 +2,7 @@ Training toolbox for managing prompt, caption, and metadata workflows across ana
 
 # Configuration
 Defaults for every agent live in `config/config.yml` (with secrets in `config/secrets.yml`).
-`lib.config.get_settings()` returns a shared Dynaconf settings object that merges both files, so scripts, CLIs, and notebooks can all read consistent values (e.g. `settings.get("captioner.output_dir")`).
+`src.lib.config.get_settings()` returns a shared Dynaconf settings object that merges both files, so scripts, CLIs, and notebooks can all read consistent values (e.g. `settings.get("captioner.output_dir")`).
 Override the config directory with `TRAINING_TOOLBOX_CONFIG_DIR` or add `config.local.yml`/`config.d/*.yml` for per-machine tweaks.
 
 # Toolbox UI

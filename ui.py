@@ -11,9 +11,9 @@ from src.ui.comfy_prompt_extractor_tab import create_comfy_prompt_extractor_tab
 from src.tag_analyzer.prompt_data import PromptData
 from src.tag_analyzer.processor import PromptProcessor
 from src.tag_analyzer.tag_analyzer import create_analyzer
-from lib.database import TagDatabase
+from src.lib.database import TagDatabase
 
-from lib.config import get_settings
+from src.lib.config import get_settings
 
 
 # The analyzer is designed to support GUI and TUI front-ends, so initialization functions are separated.

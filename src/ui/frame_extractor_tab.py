@@ -2,8 +2,8 @@ import gradio as gr
 import os
 from pathlib import Path
 import asyncio
-from lib.ffmpeg_frames import extract_frames
-from lib.wsl_utils import convert_path_if_needed, is_wsl
+from src.lib.ffmpeg_frames import extract_frames
+from src.lib.wsl_utils import convert_path_if_needed, is_wsl
 
 def list_directories(base_path="/mnt/c/Users"):
     """Return a list of directories at the given path"""
@@ -24,6 +24,7 @@ def list_videos(directory):
     except Exception as e:
         return [f"Error: {str(e)}"]
 
+# TODO: put this in a library
 async def process_videos(selected_dir, selected_videos, output_dir, num_frames=5, status_callback=None):
     """Process selected videos from the directory with async updates"""
     if not selected_dir or not selected_videos:

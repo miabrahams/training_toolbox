@@ -30,7 +30,7 @@ from typing import Any, Dict, Mapping, Optional, Set, Tuple
 
 import yaml
 
-from lib.metadata import read_comfy_metadata
+from src.lib.metadata import read_comfy_metadata
 
 
 # -------- Data structures ---------

@@ -115,19 +115,6 @@ def raw_image_info(filename: Path) -> dict[str | tuple[int, int], Any]:
     return img.info
 
 
-"""
-def raw_image_info_orig(filename: str) -> dict[str, str]:
-    img = Image.open(filename)
-    if filename[-4:] == ".png":
-        info = img.load()
-        return img.info
-    # This should just return exif_data and parse elsewhere
-    elif filename[-4:] == ".jpg":
-        exif_data = img._getexif()
-        return exif_data[37510].decode('utf-8').replace('\x00', '').replace('UNICODE', '')
- """
-
-
 # Read PIL image metadata
 def info_from_file(filename: Path) -> dict:
     info = raw_image_info(filename)
