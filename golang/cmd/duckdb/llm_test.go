@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"testing"
+	"training_toolbox/internal/config"
 
 	"github.com/openai/openai-go/v2"
 	"github.com/stretchr/testify/require"
@@ -11,7 +12,7 @@ import (
 func TestQuery(t *testing.T) {
 	t.Skip()
 	t.Log(os.Getwd())
-	secrets, err := LoadSecrets("./../../../secrets.yml")
+	secrets, err := config.LoadSecrets("./../../../secrets.yml")
 	require.NoError(t, err, "Failed to load secrets")
 
 	apiKey := secrets.String("DEEPSEEK_API_KEY")

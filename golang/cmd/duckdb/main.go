@@ -14,6 +14,10 @@ import (
 
 	"github.com/knadh/koanf/v2"
 	_ "github.com/marcboeker/go-duckdb"
+
+	"training_toolbox/internal/client"
+	"training_toolbox/internal/config"
+	"training_toolbox/internal/database"
 )
 
 func main() {
@@ -35,14 +39,14 @@ func run_main() error {
 	)
 	slog.SetDefault(logger)
 
-	k, err := LoadConfig(configPath)
+	k, err := config.LoadConfig(configPath)
 	if err != nil {
 		return err
 	}
 
-	if k.String(logLevelKey) != "" {
+	if k.String(config.LogLevelKey) != "" {
 		levelReader := slog.Level(0)
-		err := levelReader.UnmarshalText([]byte(k.String(logLevelKey)))
+		err := levelReader.UnmarshalText([]byte(k.String(config.LogLevelKey)))
 		if err != nil {
 			return fmt.Errorf("invalid log level: %w", err)
 		}
@@ -56,7 +60,7 @@ func run_main() error {
 	}
 	slog.Info("loaded posts from database", "count", len(posts), "duration", time.Since(now))
 
-	if k.Bool(dryRunKey) {
+	if k.Bool(config.DryRunKey) {
 		slog.Info("dry run enabled, not sending posts.")
 		for _, post := range posts {
 			slog.Info("post data", "id", post.ID, "tags", post.Tags)
@@ -66,8 +70,8 @@ func run_main() error {
 	}
 
 	genConfig := buildGenerationOptions(k)
-	client := ComfyAPIClient{
-		BaseURL: k.String(comfyUrlKey),
+	client := client.ComfyAPIClient{
+		BaseURL: k.String(config.ComfyUrlKey),
 	}
 	client.Init()
 	if err := sendPosts(ctx, client, genConfig, posts); err != nil {
@@ -85,65 +89,65 @@ func loadDB(dbPath string) (*sqlx.DB, error) {
 	return sqlx.Open("duckdb", dbPath+"?access_mode=read_only")
 }
 
-func buildFindPostsOptions(k *koanf.Koanf) FindPostsOptions {
+func buildFindPostsOptions(k *koanf.Koanf) database.FindPostsOptions {
 	var minScore *int
-	if k.Exists(minScoreKey) {
-		val := k.Int(minScoreKey)
+	if k.Exists(config.MinScoreKey) {
+		val := k.Int(config.MinScoreKey)
 		minScore = &val
 	}
 	var minFavs *int
-	if k.Exists(minFavsKey) {
-		val := k.Int(minFavsKey)
+	if k.Exists(config.MinFavsKey) {
+		val := k.Int(config.MinFavsKey)
 		minFavs = &val
 	}
-	return FindPostsOptions{
-		Tags:        k.Strings(searchTagsKey),
-		ExcludeTags: k.Strings(excludeTagsKey),
+	return database.FindPostsOptions{
+		Tags:        k.Strings(config.SearchTagsKey),
+		ExcludeTags: k.Strings(config.ExcludeTagsKey),
 		MinScore:    minScore,
 		MinFavs:     minFavs,
 		Random:      true,
-		Limit:       k.Int(limitKey),
-		DebugQuery:  k.Bool(searchDebugKey),
+		Limit:       k.Int(config.LimitKey),
+		DebugQuery:  k.Bool(config.SearchDebugKey),
 	}
 }
 
 // runDatabaseOperations connects to the DB and runs standard queries. It closes the database when finished.
 // TODO: When this becomes an interactive app, add dynamic database release
-func runDatabaseOperations(ctx context.Context, k *koanf.Koanf) ([]TaggedPost, error) {
-	dbPath := k.String(dbPathKey)
+func runDatabaseOperations(ctx context.Context, k *koanf.Koanf) ([]database.TaggedPost, error) {
+	dbPath := k.String(config.DBPathKey)
 	db, err := loadDB(dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("load db: %w", err)
 	}
 	defer db.Close()
-	slog.Info("connected to database", "path", k.String(dbPathKey))
+	slog.Info("connected to database", "path", k.String(config.DBPathKey))
 
-	if k.Bool(dbDebugKey) {
-		DBDump(ctx, db)
+	if k.Bool(config.DBDebugKey) {
+		database.DBDump(ctx, db)
 	}
 
 	options := buildFindPostsOptions(k)
-	if k.Bool(dbDebugKey) {
-		DBDump(ctx, db)
+	if k.Bool(config.DBDebugKey) {
+		database.DBDump(ctx, db)
 	}
 
 	// Show count if enabled
-	if k.Bool(showCountKey) {
-		count, err := CountPostsWithAllTags(ctx, db, options)
+	if k.Bool(config.ShowCountKey) {
+		count, err := database.CountPostsWithAllTags(ctx, db, options)
 		if err != nil {
 			return nil, fmt.Errorf("count matching posts: %w", err)
 		}
 		slog.Info("total posts matching search criteria", "count", count)
 	}
 
-	taggedPosts, err := FindPostsWithAllTags(ctx, db, options)
+	taggedPosts, err := database.FindPostsWithAllTags(ctx, db, options)
 	if err != nil {
 		return nil, fmt.Errorf("find tag string: %w", err)
 	}
 	return taggedPosts, nil
 }
 
-func tagsToPrompt(b *strings.Builder, r *strings.Replacer, post TaggedPost, stripTags map[string]struct{}) {
+func tagsToPrompt(b *strings.Builder, r *strings.Replacer, post database.TaggedPost, stripTags map[string]struct{}) {
 	rand.Shuffle(len(post.Tags), func(i int, j int) {
 		post.Tags[i], post.Tags[j] = post.Tags[j], post.Tags[i]
 	})
@@ -175,26 +179,26 @@ const bufferLength = 4096
 
 func buildGenerationOptions(k *koanf.Koanf) GenerationOptions {
 	genOpts := GenerationOptions{
-		BatchCount: k.Int(genBatchCountKey),
-		PauseTime:  k.Duration(comfyPauseTimeKey),
+		BatchCount: k.Int(config.GenBatchCountKey),
+		PauseTime:  k.Duration(config.ComfyPauseTimeKey),
 		Prefix:     "",
 		Postfix:    "",
-		StripTags:  k.Strings(genStripTagsKey),
-		AddRating:  k.Bool(genAddRatingKey),
+		StripTags:  k.Strings(config.GenStripTagsKey),
+		AddRating:  k.Bool(config.GenAddRatingKey),
 	}
 
 	// merge style config
-	style := k.String(styleKey)
+	style := k.String(config.StyleKey)
 	if style != "" {
-		styleConfigKey := fmt.Sprintf("%s.%s", stylesKey, style)
+		styleConfigKey := fmt.Sprintf("%s.%s", config.StylesKey, style)
 		if k.Exists(styleConfigKey) {
-			if prefix := k.String(styleConfigKey + prefixKey); prefix != "" {
+			if prefix := k.String(styleConfigKey + config.PrefixKey); prefix != "" {
 				genOpts.Prefix = prefix
 			}
-			if postfix := k.String(styleConfigKey + postfixKey); postfix != "" {
+			if postfix := k.String(styleConfigKey + config.PostfixKey); postfix != "" {
 				genOpts.Postfix = postfix
 			}
-			stripTags := k.Strings(styleConfigKey + stripTagsKey)
+			stripTags := k.Strings(styleConfigKey + config.StripTagsKey)
 			genOpts.StripTags = append(genOpts.StripTags, stripTags...)
 		}
 	}
@@ -208,7 +212,7 @@ type PromptBuilderOptions struct {
 	StripTags map[string]struct{}
 }
 
-func buildPrompt(post TaggedPost, config PromptBuilderOptions) string {
+func buildPrompt(post database.TaggedPost, config PromptBuilderOptions) string {
 	b := strings.Builder{}
 	b.Grow(bufferLength)
 	if config.Prefix != "" {
@@ -218,7 +222,7 @@ func buildPrompt(post TaggedPost, config PromptBuilderOptions) string {
 
 	postCopy := post
 	if config.AddRating {
-		postCopy.Tags = append(slices.Clone(postCopy.Tags), Ratings[post.Rating])
+		postCopy.Tags = append(slices.Clone(postCopy.Tags), database.Ratings[post.Rating])
 	} else {
 		postCopy.Tags = slices.Clone(postCopy.Tags)
 	}
@@ -236,7 +240,7 @@ func buildPrompt(post TaggedPost, config PromptBuilderOptions) string {
 	return prompt
 }
 
-func sendPosts(ctx context.Context, client ComfyAPIClient, config GenerationOptions, posts []TaggedPost) error {
+func sendPosts(ctx context.Context, client client.ComfyAPIClient, config GenerationOptions, posts []database.TaggedPost) error {
 	promptOpts := PromptBuilderOptions{
 		GenerationOptions: config,
 	}

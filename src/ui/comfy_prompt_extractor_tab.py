@@ -6,7 +6,7 @@ from typing import Optional, Tuple
 from lib.comfy_schemas.comfy_analysis import fileToComfyImage, extract_positive_prompt, extract_negative_prompt
 
 
-def extract_prompts_from_image(image_path: str) -> Tuple[str, str, str]:
+def extract_prompts_from_image(image_path: Path) -> Tuple[str, str, str]:
     """
     Extract positive and negative prompts from a ComfyUI image.
 
@@ -36,7 +36,7 @@ def extract_prompts_from_image(image_path: str) -> Tuple[str, str, str]:
             negative_prompt = f"Error extracting negative prompt: {str(e)}"
 
         # Create status message
-        filename = Path(image_path).name
+        filename = image_path.name
         status = f"Successfully processed: {filename}"
 
         return status, positive_prompt, negative_prompt
@@ -95,16 +95,16 @@ def create_comfy_prompt_extractor_tab():
                     )
 
         # Auto-extract when image is uploaded
-        def on_image_upload(file):
+        def on_image_upload(file: str):
             if file is None:
                 return "No image uploaded", "", ""
-            return extract_prompts_from_image(file.name)
+            return extract_prompts_from_image(Path(file))
 
         # Manual extract button
-        def on_extract_click(file):
+        def on_extract_click(file: str):
             if file is None:
                 return "Please upload an image first", "", ""
-            return extract_prompts_from_image(file.name)
+            return extract_prompts_from_image(Path(file))
 
         # Connect events
         image_input.change(
