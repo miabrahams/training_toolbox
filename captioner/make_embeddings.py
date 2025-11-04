@@ -16,6 +16,7 @@ from lib.config import load_config, load_secrets
 
 
 
+# todo: move to secrets
 def find_openai_api_key(config: DictConfig, secrets: Optional[DictConfig] = None) -> Optional[str]:
     env_key = os.getenv("OPENAI_API_KEY")
     if env_key:
@@ -104,6 +105,8 @@ def main() -> None:
     secrets = load_secrets(repo_root)
 
     # Inputs
+    # TODO: put these defaults in config.py
+    # TODO: data/captioner/v1
     captions_path_str = OmegaConf.select(
         cfg,
         "data.collated_captions",

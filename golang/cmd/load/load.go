@@ -109,6 +109,7 @@ func parseDirectoryCommand(root string, dbpath *string) error {
 	var dbPath string
 	if dbpath == nil || *dbpath == "" {
 		// default to sqlite if not provided
+		// TODO: use config default
 		dbPath = filepath.Join(root, "prompts.sqlite")
 	} else {
 		dbPath = *dbpath

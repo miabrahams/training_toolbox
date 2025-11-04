@@ -86,6 +86,7 @@ def check_database(db_path):
 
     print("Done")
 
+# TODO: config default path
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         db_path = sys.argv[1]

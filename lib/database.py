@@ -99,6 +99,7 @@ Index("idx_positive_prompt", PromptFields.positive_prompt)
 class TagDatabase:
     """SQLAlchemy-based repository for prompt analysis data."""
 
+    # TODO: default path
     def __init__(self, db_path: Path = Path("data/prompts.sqlite")):
         self.db_path = db_path
         self.engine = create_engine(f"sqlite:///{db_path}")

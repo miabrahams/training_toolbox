@@ -26,6 +26,8 @@ class TagAnalysisData:
     def _save_analysis_data(self):
         """Save analysis data to disk."""
         # Create directory if it doesn't exist
+
+        # TODO: config with default
         os.makedirs(self.data_dir, exist_ok=True)
 
         data_path = os.path.join(self.data_dir, 'analysis_data.pkl')
@@ -52,6 +54,7 @@ class TagAnalysisData:
         Returns:
             TagAnalysisData instance if data exists, None otherwise
         """
+        # TODO: config with default
         data_path = os.path.join(data_dir, 'analysis_data.pkl')
 
         if not os.path.exists(data_path):

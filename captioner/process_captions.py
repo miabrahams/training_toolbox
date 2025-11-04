@@ -12,7 +12,8 @@ logger = getLogger(__name__)
 MODEL = "gemini-1.5-flash-latest" # Updated to a common Gemini model, adjust if needed
 
 # Configuration
-INPUT_DIR = "./data/input"  # Update this path
+# TODO: make configurable; defaults data/captioner/v1
+INPUT_DIR = "./data/input"
 OUTPUT_DIR = "./data/output"
 ERROR_DIR = "./data/errors"
 

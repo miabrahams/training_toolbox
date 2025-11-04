@@ -2,6 +2,7 @@ from pathlib import Path
 import re
 
 
+# TODO: use config and point to data/captioner/v1 or smth
 output_dir = "./data/output"
 collated_file = "./data/collated_captions.txt"
 

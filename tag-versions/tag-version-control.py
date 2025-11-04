@@ -264,7 +264,7 @@ Examples:
         parser.print_help()
         return
 
-    #TODO Custom database path
+    #TODO: Custom database path
     vc = CaptionVersionControl('bats_caption_versions.db')
 
     try:

@@ -179,6 +179,7 @@ def find_duplicates(source_dir, alternates_dir, hash_size, max_distance, keep_la
             print(f"Source: {source_file},  Alternate: {alternate_file}")
         if args.write_html:
             html = generate_image_pairs_html(duplicates, 0, len(duplicates))
+            # TODO: use config
             html = html.replace("/mnt/d/", "D:/")
             with open('data/duplicates.html', 'w') as file:
                 file.write(html)
