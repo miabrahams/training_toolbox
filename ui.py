@@ -8,9 +8,9 @@ from src.ui.frame_extractor_tab import create_frame_extractor_tab
 from src.ui.prompt_search_tab import create_prompt_search_tab
 from src.ui.direct_search_tab import create_direct_search_tab
 from src.ui.comfy_prompt_extractor_tab import create_comfy_prompt_extractor_tab
-from src.tag_analyzer.prompt_data import PromptData
-from src.tag_analyzer.processor import PromptProcessor
-from src.tag_analyzer.tag_cluster_analyzer import create_analyzer
+from src.controllers.prompts.prompt_data import PromptData
+from src.controllers.prompts.processor import PromptProcessor
+from src.controllers.tags.tag_cluster_analyzer import create_analyzer
 from src.db.prompt_database import PromptDatabase
 
 from src.lib.config import get_settings

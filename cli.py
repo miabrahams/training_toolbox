@@ -17,7 +17,7 @@ from sqlalchemy import create_engine, select, insert
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.sql.schema import Table as SATable
 from typing import cast
-from src.tag_analyzer.processor import PromptProcessor
+from src.controllers.prompts.processor import PromptProcessor
 from src.lib.config import get_settings
 
 

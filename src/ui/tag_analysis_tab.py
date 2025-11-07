@@ -2,8 +2,8 @@ import gradio as gr
 import numpy as np
 from typing import Dict, Any
 
-from src.tag_analyzer.tag_cluster_analyzer import TagAnalyzer
-from src.tag_analyzer.types import ErrorResult
+from src.controllers.tags.tag_cluster_analyzer import TagAnalyzer
+from src.schemas.tags import ErrorResult
 
 def get_cluster_summary(analyzer: TagAnalyzer | None, sample_size=5, screen_dirs=None, show_paths=False, progress=gr.Progress()):
     """Get cluster summary for Gradio UI"""

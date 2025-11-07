@@ -2,14 +2,12 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Callable, Any, Dict, Iterable
-from pathlib import Path
+from typing import Callable
 from collections import Counter
 
-from src.lib.prompt_parser import clean_prompt
 
 from src.db.prompt_database import PromptDatabase
-from .utils import noCallback
+from ..tags.utils import noCallback
 from .prompt_data import PromptData
 from lib.comfy_schemas.extractor import extract_from_json
 

@@ -150,8 +150,3 @@ class VisualizationData:
 class ErrorResult:
     """Represents an error result."""
     error: str
-
-
-def create_error_result(message: str) -> ErrorResult:
-    """Helper function to create an error result."""
-    return ErrorResult(error=message)

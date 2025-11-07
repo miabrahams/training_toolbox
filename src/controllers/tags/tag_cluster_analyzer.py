@@ -15,7 +15,7 @@ import hdbscan
 from src.lib.prompt_parser import extract_tags_from_prompts
 from .tag_cluster_data import TagClusterData
 
-from .types import (
+from ...schemas.tags import (
     SearchResult, SearchResults, ClusterStats, ClusterSummary, ClusterSummaryResults,
     DirectoryClusterData, DirectoryStats, DirectoryAnalysisResults,
     TagAnalysisResults, ClusterPairDifference, ModifierAnalysisResults,
@@ -26,7 +26,7 @@ from .utils import (
     common_tokens, prompt_diffs, extract_normalized_diffs, noCallback
 )
 
-from .prompt_data import PromptData
+from src.controllers.prompts.prompt_data import PromptData
 
 class TagAnalyzer:
     def __init__(self,
