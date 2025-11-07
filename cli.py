@@ -12,7 +12,7 @@ Usage examples:
 import argparse
 from pathlib import Path
 
-from src.lib.database import TagDatabase, PromptFields
+from src.db.prompt_database import PromptDatabase, PromptFields
 from sqlalchemy import create_engine, select, insert
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.sql.schema import Table as SATable
@@ -21,14 +21,14 @@ from src.tag_analyzer.processor import PromptProcessor
 from src.lib.config import get_settings
 
 
-def reset_prompt_fields(db: TagDatabase):
+def reset_prompt_fields(db: PromptDatabase):
     """Drop and recreate the prompt_fields table."""
     db.drop_prompt_fields()
     db.ensure_schema()
     print("Prompt fields table reset.")
 
 
-def export_prompt_fields(db: TagDatabase, out_path: Path):
+def export_prompt_fields(db: PromptDatabase, out_path: Path):
     """Export the prompt_fields table (schema + data) to a separate SQLite DB.
 
     - Creates a new database at out_path if it doesn't exist
@@ -79,7 +79,7 @@ def main():
 
     args = parser.parse_args()
 
-    db = TagDatabase(args.db_path)
+    db = PromptDatabase(args.db_path)
 
     progress = lambda x, y: print(f"Progress: {x*100:.1f}% - {y}")
 

@@ -21,6 +21,8 @@ Public API:
 
 Notes:
 - The default schema points to the latest bundled schema file.
+
+TODO: use the ExtractedPrompt pydantic class for validation
 """
 from __future__ import annotations
 
@@ -31,6 +33,7 @@ from typing import Any, Dict, Mapping, Optional, Set, Tuple
 import yaml
 
 from src.lib.metadata import read_comfy_metadata
+from src.lib.prompt_parser import clean_prompt
 
 
 # -------- Data structures ---------
@@ -63,8 +66,6 @@ class SchemaSpec:
     outputs: Dict[str, Tuple[str, str]]  # output_name -> (role, input_key)
     groups: Dict[str, Set[str]]  # optional group -> set(role names)
 
-
-# -------- Schema loading ---------
 
 def _as_str(value: Any) -> str:
     return str(value) if value is not None else ""
@@ -126,8 +127,6 @@ def _load_schema(schema_path: str | Path) -> SchemaSpec:
         groups=groups,
     )
 
-
-# -------- Validation helpers ---------
 
 def _validate_role_node(role: str, spec: RoleSpec, node: Dict[str, Any]) -> None:
     """Validate a single node against the role spec (type check only)."""
@@ -200,8 +199,6 @@ def _extract_value(
     return value
 
 
-# -------- Public API ---------
-
 def extract_from_prompt(prompt_graph: Dict[str, Any], schema_path: str | Path) -> Dict[str, Any]:
     """Validate the prompt graph against the schema and extract declared outputs.
 
@@ -250,6 +247,7 @@ def extract_from_prompt(prompt_graph: Dict[str, Any], schema_path: str | Path) -
         )
         result[out_name] = value
 
+    result["cleaned_prompt"] = clean_prompt(result["positive_prompt"])
     return result
 
 

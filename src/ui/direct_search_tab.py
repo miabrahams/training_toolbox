@@ -2,9 +2,9 @@ import gradio as gr
 import time
 from typing import Dict, Any
 
-from src.lib.database import TagDatabase
+from src.db.prompt_database import PromptDatabase
 
-def direct_search(db: TagDatabase | None, query: str, limit: int = 100):
+def direct_search(db: PromptDatabase | None, query: str, limit: int = 100):
     """Search prompts directly from the database"""
     if db is None:
         return "❌ Database not initialized. Load data first.", None

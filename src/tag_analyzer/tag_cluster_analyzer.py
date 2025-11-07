@@ -13,8 +13,8 @@ import umap
 import hdbscan
 
 from src.lib.prompt_parser import extract_tags_from_prompts
-from .tag_analysis_data import TagAnalysisData
-from src.lib.database import TagDatabase
+from .tag_cluster_data import TagClusterData
+from src.db.prompt_database import PromptDatabase
 
 from .types import (
     SearchResult, SearchResults, ClusterStats, ClusterSummary, ClusterSummaryResults,
@@ -33,8 +33,8 @@ class TagAnalyzer:
     def __init__(self,
                  data_dir: Path,
                  prompt_data: PromptData,
-                 analysis: Optional[TagAnalysisData],
-                 db: TagDatabase):
+                 analysis: Optional[TagClusterData],
+                 db: PromptDatabase):
         self.prompt_data = prompt_data
         self.data_dir = data_dir
         self.analysis = analysis
@@ -79,7 +79,7 @@ class TagAnalyzer:
         embeddings, reduced_embeddings, clusters = self._analyze_prompts(progress)
 
         # Create AnalysisData instance
-        self.analysis = TagAnalysisData(
+        self.analysis = TagClusterData(
             embeddings=embeddings,
             reduced_embeddings=reduced_embeddings,
             clusters=clusters,
@@ -714,7 +714,7 @@ class TagAnalyzer:
 def create_analyzer(
     data_dir: Path,
     prompt_data: PromptData,
-    db: TagDatabase,
+    db: PromptDatabase,
     compute_analysis: bool = False,
     progress: Callable = noCallback,
 ):
@@ -730,7 +730,7 @@ def create_analyzer(
         Initialized TagAnalyzer instance
     """
     # Try to load existing analysis data
-    analysis_data = TagAnalysisData.load_analysis_data(data_dir)
+    analysis_data = TagClusterData.load_analysis_data(data_dir)
 
     analyzer = TagAnalyzer(
         data_dir=data_dir,

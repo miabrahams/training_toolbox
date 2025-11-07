@@ -10,14 +10,14 @@ from src.ui.direct_search_tab import create_direct_search_tab
 from src.ui.comfy_prompt_extractor_tab import create_comfy_prompt_extractor_tab
 from src.tag_analyzer.prompt_data import PromptData
 from src.tag_analyzer.processor import PromptProcessor
-from src.tag_analyzer.tag_analyzer import create_analyzer
-from src.lib.database import TagDatabase
+from src.tag_analyzer.tag_cluster_analyzer import create_analyzer
+from src.db.prompt_database import PromptDatabase
 
 from src.lib.config import get_settings
 
 
 # The analyzer is designed to support GUI and TUI front-ends, so initialization functions are separated.
-def initialize_analyzer(data_dir: Path, prompt_data: PromptData, db: TagDatabase,
+def initialize_analyzer(data_dir: Path, prompt_data: PromptData, db: PromptDatabase,
                         force_recompute=False, progress=gr.Progress()):
     """Initialize the analyzer with given paths and display progress"""
     try:
@@ -83,7 +83,7 @@ with gr.Blocks() as app:
             # Initialize prompt data with progress updates
             progress(0.1, "Loading prompt data...")
             # Initialize via controller (keeps SQL out of PromptData)
-            db = TagDatabase(db_path)
+            db = PromptDatabase(db_path)
             processor = PromptProcessor(db)
             processor.process_new_prompts(progress)
             prompt_data = processor.load_prompts()

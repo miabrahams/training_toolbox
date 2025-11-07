@@ -8,7 +8,7 @@ from src.lib.config import get_settings
 settings = get_settings()
 ANALYSIS_FILENAME = settings.get("tag_analyzer.analysis_filename", "analysis_data.pkl")
 
-class TagAnalysisData:
+class TagClusterData:
     """Class to store and persist tag analysis data."""
 
     def __init__(self, embeddings: np.ndarray, reduced_embeddings: np.ndarray,
@@ -47,7 +47,7 @@ class TagAnalysisData:
         print(f"Analysis data saved to {data_path}")
 
     @classmethod
-    def load_analysis_data(cls, data_dir: Path) -> Optional['TagAnalysisData']:
+    def load_analysis_data(cls, data_dir: Path) -> Optional['TagClusterData']:
         """
         Load analysis data from disk if available.
 

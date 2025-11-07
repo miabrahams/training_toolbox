@@ -27,6 +27,8 @@ from sqlalchemy.orm import (
     Session,
 )
 
+from schemas.extracted_prompt import ExtractedPrompt
+
 
 class Base(DeclarativeBase):
     pass
@@ -57,8 +59,8 @@ class PromptFields(Base):
 
     # Core prompts
     positive_prompt: Mapped[str] = mapped_column(Text)
-    negative_prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     cleaned_prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True) # positive prompt without "masterpiece" etc.
+    negative_prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     checkpoint: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     # Resolution
@@ -92,11 +94,11 @@ class PromptFields(Base):
     prompt: Mapped["Prompt"] = relationship(back_populates="prompt_text")
 
 
-Index("idx_cleaned_prompt", PromptFields.cleaned_prompt)
 Index("idx_positive_prompt", PromptFields.positive_prompt)
+Index("idx_checkpoint", PromptFields.checkpoint)
 
 
-class TagDatabase:
+class PromptDatabase:
     """SQLAlchemy-based repository for prompt analysis data."""
 
     def __init__(self, db_path: Path):
@@ -163,7 +165,7 @@ class TagDatabase:
             )
             return [(fp, pr) for fp, pr in session.execute(stmt).all()]
 
-    def upsert_prompt_text(self, file_path: str, positive_prompt: str, cleaned_prompt: str, **extras):
+    def upsert_prompt_text(self, file_path: str, prompt: ExtractedPrompt, **extras):
         """Upsert core prompt fields; extras may include any PromptText columns."""
         with self.SessionLocal.begin() as session:
             existing: Optional[PromptFields] = (
@@ -172,8 +174,7 @@ class TagDatabase:
                 ).scalar_one_or_none()
             )
             if existing:
-                existing.positive_prompt = positive_prompt
-                existing.cleaned_prompt = cleaned_prompt
+                existing.positive_prompt = prompt.positive_prompt
                 for k, v in extras.items():
                     if hasattr(existing, k):
                         setattr(existing, k, v)
@@ -182,8 +183,7 @@ class TagDatabase:
             else:
                 payload = dict(
                     file_path=file_path,
-                    positive_prompt=positive_prompt,
-                    cleaned_prompt=cleaned_prompt,
+                    positive_prompt=prompt.positive_prompt,
                     processed=1,
                 )
                 payload.update({k: v for k, v in extras.items() if hasattr(PromptFields, k)})
