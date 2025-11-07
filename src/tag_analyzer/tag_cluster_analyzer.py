@@ -176,20 +176,13 @@ class TagAnalyzer:
             self.analysis._save_analysis_data()
 
     def get_cluster_summary(self, sample_size=5, screen_dirs=None, progress: Callable = noCallback) -> ClusterSummaryResults | ErrorResult:
-        """Generate cluster summaries
-
-        Returns:
-            ClusterSummaryResults | ErrorResult
-        """
         if self.analysis is None:
             return ErrorResult("Data not loaded. Call load_data() first.")
 
         progress(0.3, "Generating cluster summaries...")
 
         cluster_summaries = self._make_cluster_summaries(
-            self.clusters, self.prompts, sample_size,
-            image_paths=self.image_paths,
-            screen_dirs=screen_dirs
+            self.clusters, sample_size, image_paths=self.image_paths, screen_dirs=screen_dirs,
         )
 
         n_clusters = len(np.unique(self.clusters)) - (1 if -1 in self.clusters else 0)
@@ -214,11 +207,6 @@ class TagAnalyzer:
 
 
     def analyze_directory(self, directory, sample_size=5, noise_sample=10, progress: Callable = noCallback) -> DirectoryAnalysisResults | ErrorResult:
-        """Analyze directory contributions to clusters
-
-        Returns:
-            DirectoryAnalysisResults | ErrorResult
-        """
         if self.analysis is None:
             return ErrorResult("Data not loaded. Call load_data() first.")
 
@@ -301,11 +289,7 @@ class TagAnalyzer:
 
     def analyze_modifiers(self, top_n=50, sample_size=20, max_clusters=None,
                           show_examples=False, max_examples=3, progress: Callable = noCallback) -> ModifierAnalysisResults | ErrorResult:
-        """Analyze common modifiers across clusters
-
-        Returns:
-            ModifierAnalysisResults | ErrorResult
-        """
+        """Analyze common modifiers across clusters"""
         if self.analysis is None:
             return ErrorResult("Data not loaded. Call load_data() first.")
 
@@ -483,8 +467,7 @@ class TagAnalyzer:
         )
 
 
-    def _make_cluster_summaries(self, clusters, prompts, sample_size=5,
-                               image_paths=None, screen_dirs=None):
+    def _make_cluster_summaries(self, clusters, sample_size=5, image_paths=None, screen_dirs=None):
         unique_clusters = np.unique(clusters)
         cluster_summaries = []
 
