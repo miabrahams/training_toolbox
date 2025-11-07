@@ -14,7 +14,6 @@ import hdbscan
 
 from src.lib.prompt_parser import extract_tags_from_prompts
 from .tag_cluster_data import TagClusterData
-from src.db.prompt_database import PromptDatabase
 
 from .types import (
     SearchResult, SearchResults, ClusterStats, ClusterSummary, ClusterSummaryResults,
@@ -34,11 +33,10 @@ class TagAnalyzer:
                  data_dir: Path,
                  prompt_data: PromptData,
                  analysis: Optional[TagClusterData],
-                 db: PromptDatabase):
+                 ):
         self.prompt_data = prompt_data
         self.data_dir = data_dir
         self.analysis = analysis
-        self.db = db
 
     @property
     def embeddings(self):
@@ -177,7 +175,7 @@ class TagAnalyzer:
         if self.analysis is not None:
             self.analysis._save_analysis_data()
 
-    def get_cluster_summary(self, sample_size=5, screen_dirs=None, show_paths=False, progress: Callable = noCallback) -> ClusterSummaryResults | ErrorResult:
+    def get_cluster_summary(self, sample_size=5, screen_dirs=None, progress: Callable = noCallback) -> ClusterSummaryResults | ErrorResult:
         """Generate cluster summaries
 
         Returns:
@@ -714,32 +712,17 @@ class TagAnalyzer:
 def create_analyzer(
     data_dir: Path,
     prompt_data: PromptData,
-    db: PromptDatabase,
     compute_analysis: bool = False,
     progress: Callable = noCallback,
 ):
-    """
-    Args:
-        data_dir: Path to directory to store/load analysis data
-        prompt_data: PromptData instance with prompt texts and paths
-        db: TagDatabase instance
-        compute_analysis: Whether to compute embeddings and clusters immediately
-        progress: Progress callback function
-
-    Returns:
-        Initialized TagAnalyzer instance
-    """
-    # Try to load existing analysis data
     analysis_data = TagClusterData.load_analysis_data(data_dir)
 
     analyzer = TagAnalyzer(
         data_dir=data_dir,
         prompt_data=prompt_data,
         analysis=analysis_data,
-        db=db
     )
 
-    # Only compute analysis data if requested and not already loaded
     if compute_analysis and analysis_data is None:
         analyzer._compute_analysis_data(progress)
 

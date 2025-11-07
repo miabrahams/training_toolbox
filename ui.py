@@ -21,11 +21,9 @@ def initialize_analyzer(data_dir: Path, prompt_data: PromptData, db: PromptDatab
                         force_recompute=False, progress=gr.Progress()):
     """Initialize the analyzer with given paths and display progress"""
     try:
-        # Create analyzer without computing clusters (unless forced)
         analyzer = create_analyzer(
             data_dir=data_dir,
             prompt_data=prompt_data,
-            db=db,
             compute_analysis=force_recompute,
             progress=progress
         )

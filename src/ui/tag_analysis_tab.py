@@ -16,7 +16,6 @@ def get_cluster_summary(analyzer: TagAnalyzer | None, sample_size=5, screen_dirs
     result = analyzer.get_cluster_summary(
         sample_size=sample_size,
         screen_dirs=screen_dirs.split(",") if screen_dirs and screen_dirs.strip() else None,
-        show_paths=show_paths,
         progress=progress_callback
     )
 
@@ -284,7 +283,6 @@ def generate_summary(analyzer: TagAnalyzer | None, sample_size, screen_dirs_str,
         result = analyzer.get_cluster_summary(
             sample_size=sample_size,
             screen_dirs=screen_dirs,
-            show_paths=show_paths
         )
 
         if isinstance(result, ErrorResult):
