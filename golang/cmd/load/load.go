@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"training_toolbox/internal/database"
+	promptdb "training_toolbox/internal/database/prompts"
 	"training_toolbox/internal/parser"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -96,7 +96,7 @@ func getPngPaths(root string) ([]string, error) {
 }
 
 type fileResult struct {
-	database.FilePrompt
+	promptdb.FilePrompt
 	err error
 }
 
@@ -158,7 +158,7 @@ func parseDirectory(paths []string, pdb promptDB) error {
 		defer wg.Done()
 		for path := range filesCh {
 			prompt, workflow, err := parser.ExtractFileChunks(path)
-			fileprompt := database.FilePrompt{Path: path, Prompt: prompt, Workflow: workflow}
+			fileprompt := promptdb.FilePrompt{FilePath: path, Prompt: prompt, Workflow: workflow}
 			resultsCh <- fileResult{FilePrompt: fileprompt, err: err}
 		}
 	}
@@ -183,7 +183,7 @@ func parseDirectory(paths []string, pdb promptDB) error {
 	for res := range resultsCh {
 		processed++
 		if res.err != nil {
-			fmt.Fprintf(os.Stderr, "\n\nerror processing %s: %v\n\n", res.Path, res.err)
+			fmt.Fprintf(os.Stderr, "\n\nerror processing %s: %v\n\n", res.FilePath, res.err)
 		}
 
 		batch = append(batch, res)
@@ -271,7 +271,7 @@ func (s *sqlitePromptDB) InsertBatch(batch []fileResult) error {
 	}
 	stmt, args := buildUpsertStatement(len(batch))
 	for _, item := range batch {
-		args = append(args, item.Path, item.Prompt, item.Workflow)
+		args = append(args, item.FilePath, item.Prompt, item.Workflow)
 	}
 	_, err := s.db.Exec(stmt, args...)
 	return err

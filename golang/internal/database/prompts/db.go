@@ -1,17 +1,24 @@
-package database
+package promptdb
 
 import (
 	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
+
+	prompts "training_toolbox/internal/database/prompts/sqlc"
 )
 
 // FilePrompt represents a prompt extracted from a file
-type FilePrompt struct {
-	Path     string
-	Prompt   string
-	Workflow string
+type FilePrompt = prompts.Prompt
+
+type Queries struct {
+	*prompts.Queries
+}
+
+func New(db *sql.DB) *Queries {
+	q := Queries{Queries: prompts.New(db)}
+	return &q
 }
 
 // WithDB opens a database connection, initializes the schema, and calls the provided function

@@ -1,4 +1,4 @@
-package database
+package e6db
 
 import (
 	"context"

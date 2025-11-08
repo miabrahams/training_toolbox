@@ -15,7 +15,7 @@ import (
 
 	"training_toolbox/internal/client"
 	"training_toolbox/internal/config"
-	"training_toolbox/internal/database"
+	e6db "training_toolbox/internal/database/e621"
 )
 
 func main() {
@@ -86,8 +86,8 @@ func loadDB(dbPath string) (*sqlx.DB, error) {
 	return sqlx.Open("duckdb", dbPath+"?access_mode=read_only")
 }
 
-func buildFindPostsOptions(k config.Config) database.FindPostsOptions {
-	return database.FindPostsOptions{
+func buildFindPostsOptions(k config.Config) e6db.FindPostsOptions {
+	return e6db.FindPostsOptions{
 		Tags:        k.SearchTags(),
 		ExcludeTags: k.ExcludeTags(),
 		MinScore:    k.MinScore(),
@@ -100,7 +100,7 @@ func buildFindPostsOptions(k config.Config) database.FindPostsOptions {
 
 // runDatabaseOperations connects to the DB and runs standard queries. It closes the database when finished.
 // TODO: When this becomes an interactive app, add dynamic database release
-func runDatabaseOperations(ctx context.Context, k config.Config) ([]database.TaggedPost, error) {
+func runDatabaseOperations(ctx context.Context, k config.Config) ([]e6db.TaggedPost, error) {
 	dbPath := k.DBPath()
 	db, err := loadDB(dbPath)
 	if err != nil {
@@ -110,31 +110,31 @@ func runDatabaseOperations(ctx context.Context, k config.Config) ([]database.Tag
 	slog.Info("connected to database", "path", dbPath)
 
 	if k.DBDebug() {
-		database.DBDump(ctx, db)
+		e6db.DBDump(ctx, db)
 	}
 
 	options := buildFindPostsOptions(k)
 	if k.DBDebug() {
-		database.DBDump(ctx, db)
+		e6db.DBDump(ctx, db)
 	}
 
 	// Show count if enabled
 	if k.ShowCount() {
-		count, err := database.CountPostsWithAllTags(ctx, db, options)
+		count, err := e6db.CountPostsWithAllTags(ctx, db, options)
 		if err != nil {
 			return nil, fmt.Errorf("count matching posts: %w", err)
 		}
 		slog.Info("total posts matching search criteria", "count", count)
 	}
 
-	taggedPosts, err := database.FindPostsWithAllTags(ctx, db, options)
+	taggedPosts, err := e6db.FindPostsWithAllTags(ctx, db, options)
 	if err != nil {
 		return nil, fmt.Errorf("find tag string: %w", err)
 	}
 	return taggedPosts, nil
 }
 
-func tagsToPrompt(b *strings.Builder, r *strings.Replacer, post database.TaggedPost, stripTags map[string]struct{}) {
+func tagsToPrompt(b *strings.Builder, r *strings.Replacer, post e6db.TaggedPost, stripTags map[string]struct{}) {
 	rand.Shuffle(len(post.Tags), func(i int, j int) {
 		post.Tags[i], post.Tags[j] = post.Tags[j], post.Tags[i]
 	})
@@ -195,7 +195,7 @@ type PromptBuilderOptions struct {
 	StripTags map[string]struct{}
 }
 
-func buildPrompt(post database.TaggedPost, config PromptBuilderOptions) string {
+func buildPrompt(post e6db.TaggedPost, config PromptBuilderOptions) string {
 	b := strings.Builder{}
 	b.Grow(bufferLength)
 	if config.Prefix != "" {
@@ -205,7 +205,7 @@ func buildPrompt(post database.TaggedPost, config PromptBuilderOptions) string {
 
 	postCopy := post
 	if config.AddRating {
-		postCopy.Tags = append(slices.Clone(postCopy.Tags), database.Ratings[post.Rating])
+		postCopy.Tags = append(slices.Clone(postCopy.Tags), e6db.Ratings[post.Rating])
 	} else {
 		postCopy.Tags = slices.Clone(postCopy.Tags)
 	}
@@ -223,7 +223,7 @@ func buildPrompt(post database.TaggedPost, config PromptBuilderOptions) string {
 	return prompt
 }
 
-func sendPosts(ctx context.Context, client client.ComfyAPIClient, config GenerationOptions, posts []database.TaggedPost) error {
+func sendPosts(ctx context.Context, client client.ComfyAPIClient, config GenerationOptions, posts []e6db.TaggedPost) error {
 	promptOpts := PromptBuilderOptions{
 		GenerationOptions: config,
 	}

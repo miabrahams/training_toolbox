@@ -8,8 +8,7 @@ import (
 	"fmt"
 	"os"
 
-	"training_toolbox/internal/database"
-	prompts "training_toolbox/internal/database/sqlc"
+	promptdb "training_toolbox/internal/database/prompts"
 	"training_toolbox/internal/parser"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -34,8 +33,8 @@ func run() error {
 }
 
 func examineDatabase(dbpath string) error {
-	return database.WithDB(dbpath, func(db *sql.DB) error {
-		q := prompts.New(db)
+	return promptdb.WithDB(dbpath, func(db *sql.DB) error {
+		q := promptdb.New(db)
 		tp, err := q.GetTestPrompt(context.Background())
 		if err != nil {
 			return fmt.Errorf("error listing prompts: %w", err)
