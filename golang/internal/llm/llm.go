@@ -15,7 +15,7 @@ func setup_client(apiKey string) (openai.Client, error) {
 	return client, nil
 }
 
-func run_query(apiKey string) error {
+func RunQuery(apiKey string) error {
 	client, err := setup_client(apiKey)
 	if err != nil {
 		return err

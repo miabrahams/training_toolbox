@@ -15,7 +15,8 @@ func TestQuery(t *testing.T) {
 	secrets, err := config.LoadSecrets("./../../../secrets.yml")
 	require.NoError(t, err, "Failed to load secrets")
 
-	apiKey := secrets.String("DEEPSEEK_API_KEY")
+	apiKey := secrets.DeepseekAPIKey()
+
 	require.NotEmpty(t, apiKey, "DEEPSEEK_API_KEY is required")
 
 	client, err := setup_client(apiKey)

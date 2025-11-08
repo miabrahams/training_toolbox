@@ -29,13 +29,14 @@ const (
 	RandomizeKey      = "search.randomize"
 	ShowCountKey      = "search.show_count"
 	LogLevelKey       = "log.level"
-	StylesKey         = "styles"
-	PrefixKey         = ".prefix"
-	PostfixKey        = ".postfix"
-	StripTagsKey      = ".strip_tags"
+
+	StylesKey    = "styles"
+	PrefixKey    = ".prefix"
+	PostfixKey   = ".postfix"
+	StripTagsKey = ".strip_tags"
 )
 
-func LoadConfig(path string) (*koanf.Koanf, error) {
+func LoadConfig(path string) (Config, error) {
 	k := koanf.New(".")
 
 	defaults := map[string]any{
@@ -48,22 +49,57 @@ func LoadConfig(path string) (*koanf.Koanf, error) {
 	k.Load(confmap.Provider(defaults, "."), nil)
 
 	err := k.Load(file.Provider(path), yaml.Parser())
-	return k, err
+	return Config{k}, err
 }
 
-func LoadSecrets(path string) (*koanf.Koanf, error) {
-	k := koanf.New(".")
+type Config struct {
+	k *koanf.Koanf
+}
 
-	defaults := map[string]any{
-		"DEEPSEEK_API_KEY": "",
+// High-level getters to avoid referencing raw keys throughout the code.
+
+func (c Config) LogLevel() string              { return c.k.String(LogLevelKey) }
+func (c Config) DryRun() bool                  { return c.k.Bool(DryRunKey) }
+func (c Config) ComfyURL() string              { return c.k.String(ComfyUrlKey) }
+func (c Config) ComfyPauseTime() time.Duration { return c.k.Duration(ComfyPauseTimeKey) }
+
+func (c Config) DBPath() string { return c.k.String(DBPathKey) }
+func (c Config) DBDebug() bool  { return c.k.Bool(DBDebugKey) }
+
+func (c Config) SearchDebug() bool     { return c.k.Bool(SearchDebugKey) }
+func (c Config) ShowCount() bool       { return c.k.Bool(ShowCountKey) }
+func (c Config) SearchTags() []string  { return c.k.Strings(SearchTagsKey) }
+func (c Config) ExcludeTags() []string { return c.k.Strings(ExcludeTagsKey) }
+func (c Config) Limit() int            { return c.k.Int(LimitKey) }
+func (c Config) Randomize() bool       { return c.k.Bool(RandomizeKey) }
+
+func (c Config) MinScore() *int {
+	if c.k.Exists(MinScoreKey) {
+		v := c.k.Int(MinScoreKey)
+		return &v
 	}
-
-	k.Load(confmap.Provider(defaults, "."), nil)
-
-	err := k.Load(file.Provider(path), yaml.Parser())
-	if err != nil {
-		return nil, err
+	return nil
+}
+func (c Config) MinFavs() *int {
+	if c.k.Exists(MinFavsKey) {
+		v := c.k.Int(MinFavsKey)
+		return &v
 	}
+	return nil
+}
 
-	return k, nil
+func (c Config) GenBatchCount() int     { return c.k.Int(GenBatchCountKey) }
+func (c Config) GenStripTags() []string { return c.k.Strings(GenStripTagsKey) }
+func (c Config) GenAddRating() bool     { return c.k.Bool(GenAddRatingKey) }
+func (c Config) Style() string          { return c.k.String(StyleKey) }
+
+// Style option helpers
+func (c Config) StylePrefix(style string) string {
+	return c.k.String(StylesKey + "." + style + PrefixKey)
+}
+func (c Config) StylePostfix(style string) string {
+	return c.k.String(StylesKey + "." + style + PostfixKey)
+}
+func (c Config) StyleStripTags(style string) []string {
+	return c.k.Strings(StylesKey + "." + style + StripTagsKey)
 }

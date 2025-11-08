@@ -255,9 +255,8 @@ func (d *duckdbPromptDB) GetExistingFilePaths() (map[string]struct{}, error) {
 func buildUpsertStatement(num int) (string, []any) {
 	valueStrings := make([]string, 0, num)
 	valueArgs := make([]any, 0, num*3)
-	for i := 0; i < num; i++ {
+	for range num {
 		valueStrings = append(valueStrings, "(?, ?, ?)")
-		// args appended by caller
 	}
 	stmt := fmt.Sprintf(
 		"INSERT INTO prompts (file_path, prompt, workflow) VALUES %s ON CONFLICT(file_path) DO UPDATE SET prompt=excluded.prompt, workflow=excluded.workflow",

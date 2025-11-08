@@ -11,8 +11,6 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
-
-	"github.com/knadh/koanf/v2"
 	_ "github.com/marcboeker/go-duckdb"
 
 	"training_toolbox/internal/client"
@@ -44,10 +42,9 @@ func run_main() error {
 		return err
 	}
 
-	if k.String(config.LogLevelKey) != "" {
+	if k.LogLevel() != "" {
 		levelReader := slog.Level(0)
-		err := levelReader.UnmarshalText([]byte(k.String(config.LogLevelKey)))
-		if err != nil {
+		if err := levelReader.UnmarshalText([]byte(k.LogLevel())); err != nil {
 			return fmt.Errorf("invalid log level: %w", err)
 		}
 		level.Set(levelReader)
@@ -60,7 +57,7 @@ func run_main() error {
 	}
 	slog.Info("loaded posts from database", "count", len(posts), "duration", time.Since(now))
 
-	if k.Bool(config.DryRunKey) {
+	if k.DryRun() {
 		slog.Info("dry run enabled, not sending posts.")
 		for _, post := range posts {
 			slog.Info("post data", "id", post.ID, "tags", post.Tags)
@@ -71,7 +68,7 @@ func run_main() error {
 
 	genConfig := buildGenerationOptions(k)
 	client := client.ComfyAPIClient{
-		BaseURL: k.String(config.ComfyUrlKey),
+		BaseURL: k.ComfyURL(),
 	}
 	client.Init()
 	if err := sendPosts(ctx, client, genConfig, posts); err != nil {
@@ -89,50 +86,40 @@ func loadDB(dbPath string) (*sqlx.DB, error) {
 	return sqlx.Open("duckdb", dbPath+"?access_mode=read_only")
 }
 
-func buildFindPostsOptions(k *koanf.Koanf) database.FindPostsOptions {
-	var minScore *int
-	if k.Exists(config.MinScoreKey) {
-		val := k.Int(config.MinScoreKey)
-		minScore = &val
-	}
-	var minFavs *int
-	if k.Exists(config.MinFavsKey) {
-		val := k.Int(config.MinFavsKey)
-		minFavs = &val
-	}
+func buildFindPostsOptions(k config.Config) database.FindPostsOptions {
 	return database.FindPostsOptions{
-		Tags:        k.Strings(config.SearchTagsKey),
-		ExcludeTags: k.Strings(config.ExcludeTagsKey),
-		MinScore:    minScore,
-		MinFavs:     minFavs,
-		Random:      true,
-		Limit:       k.Int(config.LimitKey),
-		DebugQuery:  k.Bool(config.SearchDebugKey),
+		Tags:        k.SearchTags(),
+		ExcludeTags: k.ExcludeTags(),
+		MinScore:    k.MinScore(),
+		MinFavs:     k.MinFavs(),
+		Random:      true, // keep current behavior; could be k.Randomize() if desired
+		Limit:       k.Limit(),
+		DebugQuery:  k.SearchDebug(),
 	}
 }
 
 // runDatabaseOperations connects to the DB and runs standard queries. It closes the database when finished.
 // TODO: When this becomes an interactive app, add dynamic database release
-func runDatabaseOperations(ctx context.Context, k *koanf.Koanf) ([]database.TaggedPost, error) {
-	dbPath := k.String(config.DBPathKey)
+func runDatabaseOperations(ctx context.Context, k config.Config) ([]database.TaggedPost, error) {
+	dbPath := k.DBPath()
 	db, err := loadDB(dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("load db: %w", err)
 	}
 	defer db.Close()
-	slog.Info("connected to database", "path", k.String(config.DBPathKey))
+	slog.Info("connected to database", "path", dbPath)
 
-	if k.Bool(config.DBDebugKey) {
+	if k.DBDebug() {
 		database.DBDump(ctx, db)
 	}
 
 	options := buildFindPostsOptions(k)
-	if k.Bool(config.DBDebugKey) {
+	if k.DBDebug() {
 		database.DBDump(ctx, db)
 	}
 
 	// Show count if enabled
-	if k.Bool(config.ShowCountKey) {
+	if k.ShowCount() {
 		count, err := database.CountPostsWithAllTags(ctx, db, options)
 		if err != nil {
 			return nil, fmt.Errorf("count matching posts: %w", err)
@@ -177,30 +164,26 @@ type GenerationOptions struct {
 
 const bufferLength = 4096
 
-func buildGenerationOptions(k *koanf.Koanf) GenerationOptions {
+func buildGenerationOptions(k config.Config) GenerationOptions {
 	genOpts := GenerationOptions{
-		BatchCount: k.Int(config.GenBatchCountKey),
-		PauseTime:  k.Duration(config.ComfyPauseTimeKey),
+		BatchCount: k.GenBatchCount(),
+		PauseTime:  k.ComfyPauseTime(),
 		Prefix:     "",
 		Postfix:    "",
-		StripTags:  k.Strings(config.GenStripTagsKey),
-		AddRating:  k.Bool(config.GenAddRatingKey),
+		StripTags:  k.GenStripTags(),
+		AddRating:  k.GenAddRating(),
 	}
 
 	// merge style config
-	style := k.String(config.StyleKey)
+	style := k.Style()
 	if style != "" {
-		styleConfigKey := fmt.Sprintf("%s.%s", config.StylesKey, style)
-		if k.Exists(styleConfigKey) {
-			if prefix := k.String(styleConfigKey + config.PrefixKey); prefix != "" {
-				genOpts.Prefix = prefix
-			}
-			if postfix := k.String(styleConfigKey + config.PostfixKey); postfix != "" {
-				genOpts.Postfix = postfix
-			}
-			stripTags := k.Strings(styleConfigKey + config.StripTagsKey)
-			genOpts.StripTags = append(genOpts.StripTags, stripTags...)
+		if prefix := k.StylePrefix(style); prefix != "" {
+			genOpts.Prefix = prefix
 		}
+		if postfix := k.StylePostfix(style); postfix != "" {
+			genOpts.Postfix = postfix
+		}
+		genOpts.StripTags = append(genOpts.StripTags, k.StyleStripTags(style)...)
 	}
 
 	return genOpts

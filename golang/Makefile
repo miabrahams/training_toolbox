@@ -1,5 +1,7 @@
 .PHONY: run
 
+
+# Load a directory into the prompts database
 load:
 	go run cmd/load/main.go -db ../data/prompts.sqlite -dir ~/ComfyUI/output
 
