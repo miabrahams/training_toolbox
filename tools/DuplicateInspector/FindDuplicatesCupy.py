@@ -2,11 +2,10 @@ import os
 import shutil
 from pathlib import Path
 from tqdm import tqdm
-import skimage.metrics
 import skimage.io
 from send2trash import send2trash
 import argparse
-import cupy as cp
+import cupy as cp # pyright: ignore[reportMissingImports]
 
 def find_duplicates(source_dir, target_dir, threshold=0.1, keep_largest=None, remove_duplicates=False):
     source_files = [f for f in Path(source_dir).glob('**/*') if f.is_file() and f.suffix in ['.jpg', '.png']]
