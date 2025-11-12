@@ -49,3 +49,6 @@ embeddings:
 comfy:
   url:
   pause_time:
+
+lora_sidebar:
+  data:

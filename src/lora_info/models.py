@@ -1,10 +1,11 @@
 """Data structures that describe parsed LoRA metadata."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Mapping
+
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 DATE_FORMATS = (
     "%Y-%m-%dT%H:%M:%S.%f%z",
@@ -15,21 +16,46 @@ DATE_FORMATS = (
 )
 
 
-@dataclass(slots=True, frozen=True)
-class LoraMediaAsset:
+class LoraMediaAsset(BaseModel):
     """Single preview image or video entry attached to a LoRA."""
+
+    model_config = ConfigDict(frozen=True, populate_by_name=True, extra="ignore")
 
     url: str
     type: str | None = None
-    nsfw_level: int | None = None
-    has_metadata: bool | None = None
+    nsfw_level: int | None = Field(default=None, alias="nsfwLevel")
+    has_metadata: bool | None = Field(default=None, alias="hasMeta")
     prompt: str | None = None
     blurhash: str | None = None
 
+    @field_validator("url", mode="before")
+    @classmethod
+    def _validate_url(cls, value: Any) -> str:
+        text = _optional_str(value)
+        if not text:
+            raise ValueError("media asset requires a url")
+        return text
 
-@dataclass(slots=True, frozen=True)
-class LoraRecord:
+    @field_validator("type", "prompt", "blurhash", mode="before")
+    @classmethod
+    def _normalize_optional_text(cls, value: Any) -> str | None:
+        return _optional_str(value)
+
+    @field_validator("nsfw_level", mode="before")
+    @classmethod
+    def _normalize_int(cls, value: Any) -> int | None:
+        return _to_int(value)
+
+    @field_validator("has_metadata", mode="before")
+    @classmethod
+    def _normalize_bool(cls, value: Any) -> bool | None:
+        return _to_bool(value)
+
+
+class LoraRecord(BaseModel):
     """High-level metadata about a LoRA variant."""
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
 
     slug: str
     directory: Path
@@ -50,15 +76,10 @@ class LoraRecord:
     version_description: str | None = None
     model_description: str | None = None
     media: tuple[LoraMediaAsset, ...] = ()
-    metadata: Mapping[str, Any] = field(default_factory=dict, repr=False)
+    metadata: dict[str, Any] = Field(default_factory=dict, repr=False)
 
     @classmethod
     def from_payload(cls, slug: str, directory: Path, payload: Mapping[str, Any]) -> "LoraRecord":
-        tags = _string_sequence(payload.get("tags"))
-        trained_words = _string_sequence(payload.get("trained_words"))
-        media = tuple(_parse_media(payload.get("images", ())))
-        created_at = _parse_datetime(payload.get("createdDate"))
-        updated_at = _parse_datetime(payload.get("updatedDate"))
         known_keys = {
             "name",
             "modelId",
@@ -78,30 +99,74 @@ class LoraRecord:
             "subdir",
             "path",
         }
-        metadata = {k: payload[k] for k in set(payload.keys()) - known_keys}
+        metadata = {k: payload[k] for k in payload.keys() - known_keys}
+        data: dict[str, Any] = {
+            "slug": slug,
+            "directory": directory,
+            "name": payload.get("name", slug),
+            "model_id": payload.get("modelId"),
+            "version_id": payload.get("versionId"),
+            "version_name": payload.get("versionName"),
+            "kind": payload.get("type"),
+            "tags": payload.get("tags"),
+            "trained_words": payload.get("trained_words"),
+            "base_model": payload.get("baseModel"),
+            "path": payload.get("path"),
+            "subdir": payload.get("subdir"),
+            "nsfw": payload.get("nsfw"),
+            "nsfw_level": payload.get("nsfwLevel"),
+            "created_at": payload.get("createdDate"),
+            "updated_at": payload.get("updatedDate"),
+            "version_description": payload.get("version_desc"),
+            "model_description": payload.get("model_desc"),
+            "media": payload.get("images"),
+            "metadata": metadata,
+        }
+        return cls.model_validate(data)
 
-        return cls(
-            slug=slug,
-            directory=directory,
-            name=str(payload.get("name", slug)),
-            model_id=_to_int(payload.get("modelId")),
-            version_id=_to_int(payload.get("versionId")),
-            version_name=_optional_str(payload.get("versionName")),
-            kind=_optional_str(payload.get("type")),
-            tags=tags,
-            trained_words=trained_words,
-            base_model=_optional_str(payload.get("baseModel")),
-            path=_optional_path(payload.get("path")),
-            subdir=_optional_str(payload.get("subdir")),
-            nsfw=_to_bool(payload.get("nsfw")),
-            nsfw_level=_to_int(payload.get("nsfwLevel")),
-            created_at=created_at,
-            updated_at=updated_at,
-            version_description=_optional_str(payload.get("version_desc")),
-            model_description=_optional_str(payload.get("model_desc")),
-            media=media,
-            metadata=metadata,
-        )
+    @field_validator("name", "version_name", "kind", "base_model", "subdir", "version_description", "model_description", mode="before")
+    @classmethod
+    def _normalize_text(cls, value: Any) -> str | None:
+        return _optional_str(value)
+
+    @field_validator("tags", "trained_words", mode="before")
+    @classmethod
+    def _normalize_string_sequence(cls, value: Any) -> tuple[str, ...]:
+        return _string_sequence(value)
+
+    @field_validator("model_id", "version_id", "nsfw_level", mode="before")
+    @classmethod
+    def _normalize_optional_int(cls, value: Any) -> int | None:
+        return _to_int(value)
+
+    @field_validator("nsfw", mode="before")
+    @classmethod
+    def _normalize_optional_bool(cls, value: Any) -> bool | None:
+        return _to_bool(value)
+
+    @field_validator("created_at", "updated_at", mode="before")
+    @classmethod
+    def _normalize_datetime(cls, value: Any) -> datetime | None:
+        return _parse_datetime(value)
+
+    @field_validator("path", mode="before")
+    @classmethod
+    def _normalize_path(cls, value: Any) -> Path | None:
+        return _optional_path(value)
+
+    @field_validator("media", mode="before")
+    @classmethod
+    def _normalize_media(cls, value: Any) -> tuple[LoraMediaAsset, ...]:
+        return _parse_media(value)
+
+    @field_validator("metadata", mode="before")
+    @classmethod
+    def _normalize_metadata(cls, value: Any) -> dict[str, Any]:
+        if value is None:
+            return {}
+        if isinstance(value, Mapping):
+            return dict(value)
+        raise TypeError("metadata must be a mapping")
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -123,9 +188,11 @@ class LoraRecord:
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "version_description": self.version_description,
             "model_description": self.model_description,
-            "media": [media.__dict__ for media in self.media],
+            "media": [asset.model_dump(mode="python") for asset in self.media],
             "metadata": dict(self.metadata),
         }
+
+
 
 
 def _string_sequence(values: Any) -> tuple[str, ...]:
@@ -143,19 +210,25 @@ def _string_sequence(values: Any) -> tuple[str, ...]:
     return tuple(result)
 
 
-def _parse_media(items: Iterable[Mapping[str, Any]]) -> Iterable[LoraMediaAsset]:
-    for item in items or ():
-        url = item.get("url")
-        if not url:
+def _parse_media(items: Any) -> tuple[LoraMediaAsset, ...]:
+    if not items:
+        return ()
+    result: list[LoraMediaAsset] = []
+    for item in items:
+        if isinstance(item, LoraMediaAsset):
+            result.append(item)
             continue
-        yield LoraMediaAsset(
-            url=str(url),
-            type=_optional_str(item.get("type")),
-            nsfw_level=_to_int(item.get("nsfwLevel")),
-            has_metadata=_to_bool(item.get("hasMeta")),
-            prompt=_optional_str(item.get("prompt")),
-            blurhash=_optional_str(item.get("blurhash")),
-        )
+        if not isinstance(item, Mapping):
+            continue
+        data = dict(item)
+        if not data.get("url"):
+            continue
+        try:
+            result.append(LoraMediaAsset.model_validate(data))
+        except ValidationError:
+            continue
+    return tuple(result)
+
 
 
 def _parse_datetime(value: Any) -> datetime | None:

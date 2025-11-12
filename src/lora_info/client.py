@@ -5,9 +5,11 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Iterable, Sequence
+from typing import Callable, Sequence
 
 from .models import LoraRecord
+
+from pydantic import ValidationError
 
 LOGGER = logging.getLogger(__name__)
 
@@ -88,6 +90,10 @@ class LoraInfoClient:
                 continue
             try:
                 record = LoraRecord.from_payload(slug=slug, directory=entry, payload=payload)
+            except ValidationError as exc:
+                errors.append(LoraLoadError(slug=slug, path=info_path, reason=str(exc)))
+                LOGGER.warning("Failed to validate LoRA info at %s: %s", info_path, exc)
+                continue
             except Exception as exc:  # pragma: no cover - defensive safety net
                 errors.append(LoraLoadError(slug=slug, path=info_path, reason=str(exc)))
                 LOGGER.warning("Failed to parse LoRA info at %s: %s", info_path, exc)
@@ -177,12 +183,3 @@ def _record_matches(record: LoraRecord, needle: str) -> bool:
     for word in record.trained_words:
         fields.append(word.casefold())
     return any(needle in field for field in fields)
-
-
-__all__ = [
-    "LoraInfoClient",
-    "LoraInfoError",
-    "LoraDirectoryNotFound",
-    "LoraRecordNotFound",
-    "LoraLoadError",
-]
