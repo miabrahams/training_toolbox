@@ -36,6 +36,8 @@ dependencies = [
   "matplotlib>=3.10.7",
   "fastapi>=0.121.0",
   "pydantic>=2.11.10",
+  "duckdb>=1.4.1",
+  "duckdb-engine>=0.17.0",
 ]
 
 [project.optional-dependencies]
