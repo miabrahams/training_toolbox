@@ -1,7 +1,7 @@
 from typing import Dict, Any, Iterable
 from pathlib import Path
 
-from lib.errors import ExtractionFailedError
+from src.lib.errors import ExtractionFailedError
 from .comfy_analysis_v2 import (
     extract_from_prompt,
     DEFAULT_SCHEMA_PATH,

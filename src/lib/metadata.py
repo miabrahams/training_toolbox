@@ -1,6 +1,6 @@
 import re
 import json
-from typing import Any
+from typing import Any, IO
 from PIL import Image, PngImagePlugin
 from pathlib import Path
 from itertools import islice
@@ -111,7 +111,13 @@ def tags_from_metadata(metadata):
 
 def raw_image_info(filename: Path) -> dict[str | tuple[int, int], Any]:
     img = Image.open(filename)
-    _ = img.load() # TODO what is the return value?
+    _ = img.load() # TODO is there a useful return value?
+    return img.info
+
+
+def memory_image_info(data: IO[bytes]) -> dict[str | tuple[int, int], Any]:
+    img = Image.open(data)
+    _ = img.load()
     return img.info
 
 

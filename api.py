@@ -6,7 +6,7 @@ from typing import Any
 from src.lib.config import load_settings
 from src.lora_info import LoraInfoClient
 
-from src.api.v1.routers.lora_router import lora_router
+from src.api.v1.routers import lora_router, extract_router
 
 
 app = FastAPI()
@@ -32,3 +32,4 @@ def read_root():
 
 
 app.include_router(lora_router, prefix="/api/v1")
+app.include_router(extract_router, prefix="/api/v1")
