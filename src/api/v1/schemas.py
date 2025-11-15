@@ -59,3 +59,43 @@ class LocalPromptStats(BaseModel):
     avg_steps: float | None = None
     avg_cfg: float | None = None
     top_checkpoints: List[CheckpointStat]
+
+
+class ImageboardPost(BaseModel):
+    id: int
+    seq_id: int
+    created_at: datetime
+    rating: str
+    image_width: int
+    image_height: int
+    fav_count: int
+    file_ext: str
+    is_deleted: bool
+    score: int
+    up_score: int
+    down_score: int
+    tags: List[str]
+
+
+class ImageboardPostListResponse(BaseModel):
+    total: int
+    count: int
+    offset: int
+    limit: int
+    items: List[ImageboardPost]
+
+
+class ImageboardTag(BaseModel):
+    tag_id: int
+    name: str
+    category: int
+    count: int
+    avg_score: float
+
+
+class ImageboardTagListResponse(BaseModel):
+    total: int
+    count: int
+    offset: int
+    limit: int
+    items: List[ImageboardTag]

@@ -6,9 +6,15 @@ from pathlib import Path
 from src.lib.config import load_settings
 from src.lora_info import LoraInfoClient
 from src.db.prompt_database import PromptDatabase
+from src.db.e6sql import ImageboardDatabase
 from src.controllers.prompts.processor import PromptProcessor
 
-from src.api.v1.routers import lora_router, extract_router, local_prompts_router
+from src.api.v1.routers import (
+    lora_router,
+    extract_router,
+    local_prompts_router,
+    imageboard_router,
+)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -20,12 +26,15 @@ async def lifespan(app: FastAPI):
     lora_directory = settings['lora_sidebar.data']
     app.state.lora_client = LoraInfoClient.from_directory(lora_directory)
 
-    db_path = Path(settings.get("prompt_db.path", "data/prompts.sqlite"))
+    db_path = Path(settings.get("ui.defaults.db_path", "data/prompts.sqlite"))
     db_path.parent.mkdir(parents=True, exist_ok=True)
     prompt_db = PromptDatabase(db_path)
     prompt_db.ensure_schema()
     app.state.prompt_db = prompt_db
     app.state.prompt_processor = PromptProcessor(prompt_db)
+
+    imageboard_path = Path(settings.get("db.path", "data/imageboard.duckdb"))
+    app.state.imageboard_db = ImageboardDatabase(imageboard_path)
     try:
         yield
     finally:
@@ -43,3 +52,4 @@ def read_root():
 app.include_router(lora_router, prefix="/api/v1")
 app.include_router(extract_router, prefix="/api/v1")
 app.include_router(local_prompts_router, prefix="/api/v1")
+app.include_router(imageboard_router, prefix="/api/v1")
