@@ -2,9 +2,6 @@
 ui:
   server:
     port: 7000
-  defaults:
-    db_path: "data/prompts.sqlite"
-    data_dir: "data"
 
 log:
   level: debug
@@ -39,7 +36,11 @@ tools:
   comfy:
     data_path:
 
-db:
+prompt_db:
+  path:
+  data_dir:
+
+caption_db:
   path:
 
 embeddings:

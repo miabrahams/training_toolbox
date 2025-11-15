@@ -71,7 +71,6 @@ def _load_settings(config_dir: str) -> LazySettings:
 
     validators = [
         Validator("ui.server.port", cast=int, default=7000),
-        Validator("ui.defaults.db_path", default="data/prompts.sqlite"),
         Validator("ui.defaults.data_dir", default="data"),
         Validator("captioner.input_dir", default="./data/input"),
         Validator("captioner.output_dir", default="./data/output"),
@@ -92,6 +91,8 @@ def _load_settings(config_dir: str) -> LazySettings:
         Validator("tools.comfy.data_path", default="data"),
         Validator("tag_analyzer.analysis_filename", default="analysis_data.pkl"),
         Validator("lora_sidebar.data", default=""),
+        Validator("prompt_db.path", default="data/prompts.sqlite"),
+        Validator("caption_db.path", default=""),
     ]
     settings.validators.register(*validators)
     settings.validators.validate()

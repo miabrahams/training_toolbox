@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Any
 from datetime import datetime
 
 from sqlalchemy import (
@@ -11,6 +11,9 @@ from sqlalchemy import (
     Float,
     String,
     Text,
+    asc,
+    desc,
+    and_,
     create_engine,
     func,
     inspect,
@@ -27,7 +30,7 @@ from sqlalchemy.orm import (
     Session,
 )
 
-from schemas.extracted_prompt import ExtractedPrompt
+from src.schemas.extracted_prompt import ExtractedPrompt
 
 
 class Base(DeclarativeBase):
@@ -198,6 +201,170 @@ class PromptDatabase:
             pt = PromptFields
             rows = session.execute(select(pt.positive_prompt, pt.file_path)).tuples()
             return [r for r in rows]
+
+    def get_prompt_by_id(self, prompt_id: int) -> Optional[PromptFields]:
+        with self.SessionLocal() as session:
+            return session.get(PromptFields, prompt_id)
+
+    def query_prompt_fields(
+        self,
+        *,
+        search: Optional[str] = None,
+        checkpoint: Optional[str] = None,
+        lora: Optional[str] = None,
+        has_lora: Optional[bool] = None,
+        has_ip_adapter: Optional[bool] = None,
+        ip_enabled: Optional[bool] = None,
+        processed: Optional[bool] = None,
+        min_steps: Optional[int] = None,
+        max_steps: Optional[int] = None,
+        min_cfg: Optional[float] = None,
+        max_cfg: Optional[float] = None,
+        width: Optional[int] = None,
+        height: Optional[int] = None,
+        aspect_ratio: Optional[str] = None,
+        file_fragment: Optional[str] = None,
+        limit: int = 50,
+        offset: int = 0,
+        sort_by: str = "updated",
+        sort_desc: bool = True,
+    ) -> Tuple[List[PromptFields], int]:
+        limit = max(1, min(limit, 200))
+        offset = max(0, offset)
+
+        with self.SessionLocal() as session:
+            pt = PromptFields
+            filters = []
+            if search:
+                filters.append(pt.positive_prompt.ilike(f"%{search}%"))
+            if checkpoint:
+                filters.append(pt.checkpoint.ilike(f"%{checkpoint}%"))
+            if lora:
+                filters.append(pt.loras.ilike(f"%{lora}%"))
+            if has_lora is True:
+                filters.append(pt.loras.is_not(None))
+                filters.append(func.length(func.trim(pt.loras)) > 0)
+            elif has_lora is False:
+                filters.append((pt.loras.is_(None)) | (func.length(func.trim(pt.loras)) == 0))
+            if has_ip_adapter is True:
+                filters.append(pt.ip_image.is_not(None))
+            elif has_ip_adapter is False:
+                filters.append(pt.ip_image.is_(None))
+            if ip_enabled is not None:
+                filters.append(pt.ip_enabled.is_(ip_enabled))
+            if processed is not None:
+                processed_val = 1 if processed else 0
+                filters.append(pt.processed == processed_val)
+            if min_steps is not None:
+                filters.append(pt.steps >= min_steps)
+            if max_steps is not None:
+                filters.append(pt.steps <= max_steps)
+            if min_cfg is not None:
+                filters.append(pt.cfg >= min_cfg)
+            if max_cfg is not None:
+                filters.append(pt.cfg <= max_cfg)
+            if width is not None:
+                filters.append(pt.width == width)
+            if height is not None:
+                filters.append(pt.height == height)
+            if aspect_ratio:
+                filters.append(pt.aspect_ratio == aspect_ratio)
+            if file_fragment:
+                filters.append(pt.file_path.ilike(f"%{file_fragment}%"))
+
+            stmt = select(pt)
+            count_stmt = select(func.count()).select_from(pt)
+            if filters:
+                stmt = stmt.where(and_(*filters))
+                count_stmt = count_stmt.where(and_(*filters))
+
+            sort_columns = {
+                "updated": pt.last_updated,
+                "name": pt.name,
+                "steps": pt.steps,
+                "cfg": pt.cfg,
+                "width": pt.width,
+                "height": pt.height,
+                "seed": pt.seed,
+                "checkpoint": pt.checkpoint,
+            }
+
+            if sort_by == "random":
+                stmt = stmt.order_by(func.random())
+            else:
+                column = sort_columns.get(sort_by, pt.last_updated)
+                direction = desc if sort_desc else asc
+                stmt = stmt.order_by(direction(column))
+
+            stmt = stmt.offset(offset).limit(limit)
+
+            rows = session.execute(stmt).scalars().all()
+            total = int(session.execute(count_stmt).scalar_one() or 0)
+            return list(rows), total
+
+    def get_random_prompts(
+        self,
+        *,
+        limit: int = 1,
+        checkpoint: Optional[str] = None,
+    ) -> List[PromptFields]:
+        limit = max(1, min(limit, 100))
+        with self.SessionLocal() as session:
+            pt = PromptFields
+            stmt = select(pt)
+            if checkpoint:
+                stmt = stmt.where(pt.checkpoint.ilike(f"%{checkpoint}%"))
+            stmt = stmt.order_by(func.random()).limit(limit)
+            return list(session.execute(stmt).scalars().all())
+
+    def prompt_stats(self) -> Dict[str, Any]:
+        with self.SessionLocal() as session:
+            pt = PromptFields
+            total = session.execute(select(func.count()).select_from(pt)).scalar_one()
+            processed = (
+                session.execute(select(func.count()).where(pt.processed == 1)).scalar_one()
+            )
+            with_lora = (
+                session.execute(
+                    select(func.count()).where(
+                        pt.loras.is_not(None), func.length(func.trim(pt.loras)) > 0
+                    )
+                ).scalar_one()
+            )
+            with_ip = (
+                session.execute(select(func.count()).where(pt.ip_image.is_not(None))).scalar_one()
+            )
+            ip_enabled = (
+                session.execute(select(func.count()).where(pt.ip_enabled.is_(True))).scalar_one()
+            )
+            unique_checkpoints = (
+                session.execute(select(func.count(func.distinct(pt.checkpoint)))).scalar_one()
+            )
+            latest = session.execute(select(func.max(pt.last_updated))).scalar_one_or_none()
+            avg_steps = session.execute(select(func.avg(pt.steps))).scalar_one_or_none()
+            avg_cfg = session.execute(select(func.avg(pt.cfg))).scalar_one_or_none()
+            top_checkpoints = session.execute(
+                select(pt.checkpoint, func.count())
+                .where(pt.checkpoint.is_not(None))
+                .group_by(pt.checkpoint)
+                .order_by(func.count().desc())
+                .limit(10)
+            ).all()
+
+            return {
+                "total": int(total or 0),
+                "processed": int(processed or 0),
+                "with_lora": int(with_lora or 0),
+                "with_ip_adapter": int(with_ip or 0),
+                "with_ip_enabled": int(ip_enabled or 0),
+                "unique_checkpoints": int(unique_checkpoints or 0),
+                "latest_update": latest,
+                "avg_steps": float(avg_steps) if avg_steps is not None else None,
+                "avg_cfg": float(avg_cfg) if avg_cfg is not None else None,
+                "top_checkpoints": [
+                    {"name": name, "count": int(count)} for name, count in top_checkpoints
+                ],
+            }
 
     def _escape_like(self, value: str) -> str:
         """Escape %, _ and backslash for a SQL LIKE pattern (using \\ as escape)."""

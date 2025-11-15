@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Callable
+from typing import Callable, List, Tuple, Optional
 from collections import Counter
 
 
-from src.db.prompt_database import PromptDatabase
+from src.db.prompt_database import PromptDatabase, PromptFields
 from ..tags.utils import noCallback
 from .prompt_data import PromptData
-from lib.comfy_schemas.extractor import extract_from_json
+from src.lib.comfy_schemas.extractor import extract_from_json
 
 MAX_FAILED = 1000 # Maximum allowed failed extractions before stopping processing
 
@@ -85,3 +85,15 @@ class PromptProcessor:
             image_paths={r[0]: r[1] for r in rows},
             prompts_counter=Counter(prompt_texts),
         )
+
+    def query_prompts(self, **filters) -> Tuple[List[PromptFields], int]:
+        return self.db.query_prompt_fields(**filters)
+
+    def get_prompt(self, prompt_id: int) -> Optional[PromptFields]:
+        return self.db.get_prompt_by_id(prompt_id)
+
+    def random_prompts(self, **kwargs) -> List[PromptFields]:
+        return self.db.get_random_prompts(**kwargs)
+
+    def stats(self) -> dict:
+        return self.db.prompt_stats()
