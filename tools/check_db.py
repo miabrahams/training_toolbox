@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 import os
 
-from src.lib.config import get_settings
+from src.lib.config import load_settings
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from src.lib.comfy_schemas.comfy_analysis import extract_positive_prompt
@@ -92,7 +92,7 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         db_path = sys.argv[1]
     else:
-        settings = get_settings()
+        settings = load_settings()
         db_path = settings.get("tools.check_db.default_path") or "data/prompts.sqlite"
 
     check_database(Path(db_path))

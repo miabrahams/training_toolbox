@@ -18,7 +18,7 @@ from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.sql.schema import Table as SATable
 from typing import cast
 from src.controllers.prompts.processor import PromptProcessor
-from src.lib.config import get_settings
+from src.lib.config import load_settings
 
 
 def reset_prompt_fields(db: PromptDatabase):
@@ -61,7 +61,7 @@ def export_prompt_fields(db: PromptDatabase, out_path: Path):
 
 
 def main():
-    settings = get_settings()
+    settings = load_settings()
     default_db_path = settings.get("ui.defaults.db_path") or settings.get("tools.check_db.default_path")
     default_db = Path(default_db_path).expanduser() if default_db_path else Path("data/prompts.sqlite")
 

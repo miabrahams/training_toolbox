@@ -6,12 +6,12 @@ import skimage.io
 import skimage.transform
 # import imagehash
 
-from src.lib.config import get_settings
+from src.lib.config import load_settings
 
 # Number of images to compare
 nComparison = 5
 
-settings = get_settings()
+settings = load_settings()
 BASE_PATH = Path(settings.get("duplicate_inspector.base_path", ".")).expanduser().resolve()
 
 files = [

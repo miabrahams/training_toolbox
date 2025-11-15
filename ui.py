@@ -13,7 +13,7 @@ from src.controllers.prompts.processor import PromptProcessor
 from src.controllers.tags.tag_cluster_analyzer import create_analyzer
 from src.db.prompt_database import PromptDatabase
 
-from src.lib.config import get_settings
+from src.lib.config import load_settings
 
 
 # The analyzer is designed to support GUI and TUI front-ends, so initialization functions are separated.
@@ -40,7 +40,7 @@ def initialize_analyzer(data_dir: Path, prompt_data: PromptData, db: PromptDatab
         return f"Error: {str(e)}", None
 
 
-settings = get_settings()
+settings = load_settings()
 ui_defaults = settings.get("ui.defaults", {})
 
 with gr.Blocks() as app:

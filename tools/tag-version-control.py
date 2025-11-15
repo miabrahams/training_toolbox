@@ -7,7 +7,7 @@ from typing import List, Dict, Tuple, Optional
 from tqdm import tqdm
 from collections import Counter
 
-from src.lib.config import get_settings
+from src.lib.config import load_settings
 
 class CaptionVersionControl:
     def __init__(self, db_path="caption_versions.db"):
@@ -266,7 +266,7 @@ Examples:
         parser.print_help()
         return
 
-    settings = get_settings()
+    settings = load_settings()
     db_path = settings.get("tag_versions.database") or settings.get("tag_versions.parquet")
     vc = CaptionVersionControl(db_path or 'caption_versions.db')
 

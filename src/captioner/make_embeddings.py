@@ -11,13 +11,13 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.lib.config import get_settings
+from src.lib.config import load_settings
 
 def find_openai_api_key() -> Optional[str]:
     env_key = os.getenv("OPENAI_API_KEY")
     if env_key:
         return env_key
-    settings = get_settings()
+    settings = load_settings()
     return settings.get("openai.api_key") or settings.get("OPENAI_API_KEY")
 
 
@@ -93,7 +93,7 @@ def to_polars_parquet(
 
 
 def main() -> None:
-    settings = get_settings()
+    settings = load_settings()
 
     # Inputs
     captions_path_str = (

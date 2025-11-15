@@ -1,10 +1,10 @@
 from pathlib import Path
 import re
 
-from src.lib.config import get_settings
+from src.lib.config import load_settings
 
 
-settings = get_settings()
+settings = load_settings()
 captioner_cfg = settings.get("captioner", {})
 collator_cfg = captioner_cfg.get("collator", {})
 output_dir = Path(captioner_cfg.get("output_dir", "./data/output"))

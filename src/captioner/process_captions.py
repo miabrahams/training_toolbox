@@ -7,13 +7,13 @@ from google.genai import types
 from tqdm import tqdm
 from logging import getLogger
 
-from src.lib.config import get_settings, get_path
+from src.lib.config import load_settings, get_path
 
 logger = getLogger(__name__)
 
 MODEL = "gemini-1.5-flash-latest" # Updated to a common Gemini model, adjust if needed
 
-settings = get_settings()
+settings = load_settings()
 CAPTIONER_CFG = settings.get("captioner", {})
 INPUT_DIR = CAPTIONER_CFG.get("input_dir", "./data/input")
 OUTPUT_DIR = CAPTIONER_CFG.get("output_dir", "./data/output")

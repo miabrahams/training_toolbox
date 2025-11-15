@@ -9,9 +9,9 @@ import shutil
 from send2trash import send2trash
 import pickle
 
-from src.lib.config import get_settings
+from src.lib.config import load_settings
 
-settings = get_settings()
+settings = load_settings()
 HTML_CFG = settings.get("duplicate_inspector.html", {})
 
 

@@ -57,7 +57,7 @@ def _iter_config_files(config_dir: Path) -> Iterator[Path]:
             yield extra
 
 
-@lru_cache(maxsize=None)
+@lru_cache(maxsize=1)
 def _load_settings(config_dir: str) -> LazySettings:
     config_path = Path(config_dir)
     files = [str(p) for p in _iter_config_files(config_path)]
@@ -91,6 +91,7 @@ def _load_settings(config_dir: str) -> LazySettings:
         Validator("tools.check_db.default_path", default="data/prompts.sqlite"),
         Validator("tools.comfy.data_path", default="data"),
         Validator("tag_analyzer.analysis_filename", default="analysis_data.pkl"),
+        Validator("lora_sidebar.data", default=""),
     ]
     settings.validators.register(*validators)
     settings.validators.validate()
@@ -98,7 +99,7 @@ def _load_settings(config_dir: str) -> LazySettings:
     return settings
 
 
-def get_settings(config_dir: Optional[Path | str] = None) -> LazySettings:
+def load_settings(config_dir: Optional[Path | str] = None) -> LazySettings:
     """Return the cached Dynaconf settings instance."""
     resolved = _resolve_config_dir(config_dir)
     return _load_settings(str(resolved))
@@ -113,18 +114,18 @@ def reload_settings(config_dir: Optional[Path | str] = None) -> LazySettings:
 
 def get_section(section: str, default: Any = None, *, config_dir: Optional[Path | str] = None) -> Any:
     """Convenience helper to fetch a namespaced section (e.g. "captioner")."""
-    settings = get_settings(config_dir)
+    settings = load_settings(config_dir)
     return settings.get(section, default)
 
 
 def get_path(path: str, default: Any = None, *, config_dir: Optional[Path | str] = None) -> Any:
     """Retrieve a dotted path (``captioner.embeddings.parquet``)."""
-    settings = get_settings(config_dir)
+    settings = load_settings(config_dir)
     return settings.get(path, default)
 
 
 def register_validators(validators: Iterable[Validator], *, config_dir: Optional[Path | str] = None) -> None:
-    settings = get_settings(config_dir)
+    settings = load_settings(config_dir)
     settings.validators.register(*validators)
     settings.validators.validate()
 
@@ -132,20 +133,20 @@ def register_validators(validators: Iterable[Validator], *, config_dir: Optional
 # Backwards-compatible wrappers -------------------------------------------------
 
 def load_config(config_dir: Optional[Path | str] = None) -> LazySettings:
-    return get_settings(config_dir)
+    return load_settings(config_dir)
 
 
 def load_secrets(config_dir: Optional[Path | str] = None) -> LazySettings:
     # Secrets live in the same Dynaconf instance.
-    return get_settings(config_dir)
+    return load_settings(config_dir)
 
 
 def load_ui_config(config_dir: Optional[Path | str] = None) -> LazySettings:
-    return get_settings(config_dir)
+    return load_settings(config_dir)
 
 
 __all__ = [
-    "get_settings",
+    "load_settings",
     "reload_settings",
     "get_section",
     "get_path",

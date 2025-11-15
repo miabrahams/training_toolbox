@@ -3,9 +3,9 @@ import pickle
 from pathlib import Path
 from typing import Optional
 
-from src.lib.config import get_settings
+from src.lib.config import load_settings
 
-settings = get_settings()
+settings = load_settings()
 ANALYSIS_FILENAME = settings.get("tag_analyzer.analysis_filename", "analysis_data.pkl")
 
 class TagClusterData:
