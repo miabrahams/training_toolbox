@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.responses import RedirectResponse
 from contextlib import asynccontextmanager
 from time import time
 from pathlib import Path
@@ -45,8 +46,9 @@ app = FastAPI(lifespan=lifespan)
 
 
 @app.get("/")
-def read_root():
-    return {"Hello": "World"}
+def root_redirect():
+    """Redirect to API documentation"""
+    return RedirectResponse(url="/docs")
 
 
 app.include_router(lora_router, prefix="/api/v1")
