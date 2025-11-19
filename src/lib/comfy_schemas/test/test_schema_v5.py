@@ -11,7 +11,9 @@ from src.lib.comfy_schemas.comfy_analysis_v2 import extract_from_prompt
 
 # TODO: better relative pathing...
 ROOT = Path(__file__).resolve().parents[3]
-SCHEMA_PATH = ROOT / "lib" / "comfy_schemas" / "schemas" / "schema_v5.yml"
+SCHEMA_PATH = (
+    ROOT / "lib" / "comfy_schemas" / "schema_definitions" / "schema_v5.yml"
+)
 EXPORT_PATH = ROOT / "lib" / "comfy_schemas" / "test" / "data" / "test_schema_v5.png"
 
 
@@ -68,18 +70,19 @@ def _run_validation() -> tuple[str, str]:
     }
 
     derived: Dict[str, Any] = {}
-    ar_label = extracted.get("aspect_ratio")
+    ar_label = extracted.aspect_ratio
     if isinstance(ar_label, str) and "896x1152" in ar_label:
         derived["dim"] = "896x1152"
-    if "ip_enabled" in extracted:
-        derived["IPAdapter"] = extracted.get("ip_enabled")
+    if extracted.ip_enabled is not None:
+        derived["IPAdapter"] = extracted.ip_enabled
 
     comparable: Dict[str, Any] = {}
     for src_key, exp_key in mapping.items():
         if exp_key is None:
             continue
-        if src_key in extracted:
-            comparable[exp_key] = extracted[src_key]
+        value = getattr(extracted, src_key, None)
+        if value is not None:
+            comparable[exp_key] = value
     comparable.update(derived)
 
     # Fields that are optional and should be skipped when their optional group is omitted

@@ -14,15 +14,13 @@ stored under an image's "prompt" metadata) according to a YAML schema.
   corresponding role's node is present; it is omitted otherwise.
 
 Public API:
-  extract_from_prompt(prompt_graph: dict, schema_path: str | Path) -> dict
-  extract_from_file(filename: Path, schema_path: str | Path) -> dict
-  extract_latest_from_prompt(prompt_graph: dict) -> dict
-  extract_latest_from_file(filename: Path) -> dict
+  extract_from_prompt(prompt_graph: dict, schema_path: str | Path) -> ExtractedPrompt
+  extract_from_file(filename: Path, schema_path: str | Path) -> ExtractedPrompt
+  extract_latest_from_prompt(prompt_graph: dict) -> ExtractedPrompt
+  extract_latest_from_file(filename: Path) -> ExtractedPrompt
 
 Notes:
 - The default schema points to the latest bundled schema file.
-
-TODO: use the ExtractedPrompt pydantic class for validation
 """
 from __future__ import annotations
 
@@ -31,9 +29,11 @@ from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Set, Tuple
 
 import yaml
+from pydantic import ValidationError
 
 from src.lib.metadata import read_comfy_metadata
 from src.lib.prompt_parser import clean_prompt
+from src.schemas.extracted_prompt import ExtractedPrompt
 
 
 # -------- Data structures ---------
@@ -128,6 +128,17 @@ def _load_schema(schema_path: str | Path) -> SchemaSpec:
     )
 
 
+def _validate_outputs(schema: SchemaSpec) -> None:
+    """Ensure schema outputs map to known ExtractedPrompt fields."""
+    allowed = set(ExtractedPrompt.model_fields)
+    unknown = sorted(k for k in schema.outputs if k not in allowed)
+    if unknown:
+        raise ValueError(
+            "Schema outputs reference unknown ExtractedPrompt field(s): "
+            + ", ".join(unknown)
+        )
+
+
 def _validate_role_node(role: str, spec: RoleSpec, node: Dict[str, Any]) -> None:
     """Validate a single node against the role spec (type check only)."""
     if spec.node_type:
@@ -199,12 +210,10 @@ def _extract_value(
     return value
 
 
-def extract_from_prompt(prompt_graph: Dict[str, Any], schema_path: str | Path) -> Dict[str, Any]:
-    """Validate the prompt graph against the schema and extract declared outputs.
-
-    Behavior matches comfy_analysis_v2, with clearer structure and error messages.
-    """
+def extract_from_prompt(prompt_graph: Dict[str, Any], schema_path: str | Path) -> ExtractedPrompt:
+    """Validate the prompt graph against the schema and produce an ExtractedPrompt."""
     schema = _load_schema(schema_path)
+    _validate_outputs(schema)
 
     # Resolve roles and detect optional group presence
     resolved_nodes, group_present = _determine_group_presence(prompt_graph, schema)
@@ -247,24 +256,37 @@ def extract_from_prompt(prompt_graph: Dict[str, Any], schema_path: str | Path) -
         )
         result[out_name] = value
 
+    if "positive_prompt" not in result:
+        raise ValueError(
+            "Schema outputs missing required field 'positive_prompt' for cleaning"
+        )
+
     result["cleaned_prompt"] = clean_prompt(result["positive_prompt"])
-    return result
+
+    try:
+        return ExtractedPrompt(**result)
+    except ValidationError as ve:
+        raise ValueError(
+            "Extracted values do not conform to ExtractedPrompt: " + str(ve)
+        ) from ve
 
 
-def extract_from_file(filename: Path, schema_path: str | Path) -> Dict[str, Any]:
+def extract_from_file(filename: Path, schema_path: str | Path) -> ExtractedPrompt:
     prompt, _ = read_comfy_metadata(filename)
     return extract_from_prompt(prompt, schema_path)
 
 
-# Convenience default schema path (latest located under schemas/)
-DEFAULT_SCHEMA_PATH = Path(__file__).with_name("schemas").joinpath("schema_v5.yml")
+# Convenience default schema path (latest located under schema_definitions/)
+DEFAULT_SCHEMA_PATH = (
+    Path(__file__).with_name("schema_definitions").joinpath("schema_v5.yml")
+)
 
 
-def extract_latest_from_prompt(prompt_graph: Dict[str, Any]) -> Dict[str, Any]:
+def extract_latest_from_prompt(prompt_graph: Dict[str, Any]) -> ExtractedPrompt:
     return extract_from_prompt(prompt_graph, DEFAULT_SCHEMA_PATH)
 
 
-def extract_latest_from_file(filename: Path) -> Dict[str, Any]:
+def extract_latest_from_file(filename: Path) -> ExtractedPrompt:
     return extract_from_file(filename, DEFAULT_SCHEMA_PATH)
 
 
