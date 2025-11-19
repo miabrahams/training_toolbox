@@ -5,13 +5,14 @@ from io import BytesIO
 from src.lib.metadata import comfy_metadata, memory_image_info
 from src.lib.comfy_schemas.extractor import extract_from_json
 from src.lib.errors import ExtractionFailedError
+from src.schemas.prompt import ImagePrompt
 
 extract_router = APIRouter(prefix="/extract", tags=["extract"])
 
 
 # TODO make the metadata extractor a dependency
 @extract_router.post("/image", summary="Extract prompt from a PNG image")
-async def extract_from_image(file: UploadFile = File(...)) -> dict[str, Any]:
+async def extract_from_image(file: UploadFile = File(...)) -> ImagePrompt:
     if file.content_type not in ("image/png", "application/octet-stream"):
         raise HTTPException(status_code=415, detail="Only PNG images are supported")
 
@@ -28,4 +29,5 @@ async def extract_from_image(file: UploadFile = File(...)) -> dict[str, Any]:
     except ExtractionFailedError as e:
         raise HTTPException(status_code=422, detail=f"Schema extraction failed: {e}")
 
-    return extracted.model_dump()
+    # Downcast to the shared base type so we only expose the common prompt fields.
+    return ImagePrompt.model_validate(extracted)

@@ -5,32 +5,19 @@ from typing import List
 
 from pydantic import BaseModel, ConfigDict
 
+from src.schemas.prompt import ImagePrompt
 
-class LocalPrompt(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+
+class LocalPrompt(ImagePrompt):
+    model_config = ConfigDict(
+        from_attributes=True, extra="ignore", populate_by_name=True
+    )
 
     id: int
     file_path: str
     name: str | None = None
-    positive_prompt: str
-    cleaned_prompt: str | None = None
-    negative_prompt: str | None = None
-    checkpoint: str | None = None
     width: int | None = None
     height: int | None = None
-    aspect_ratio: str | None = None
-    swap_dimensions: bool | None = None
-    loras: str | None = None
-    steps: int | None = None
-    cfg: float | None = None
-    sampler_name: str | None = None
-    scheduler: str | None = None
-    seed: int | None = None
-    rescale_cfg: bool | None = None
-    perp_neg: bool | None = None
-    ip_image: str | None = None
-    ip_weight: float | None = None
-    ip_enabled: bool | None = None
     processed: int | None = None
     last_updated: datetime | None = None
 

@@ -2,7 +2,7 @@ from typing import Dict, Any, Iterable
 from pathlib import Path
 
 from src.lib.errors import ExtractionFailedError
-from src.schemas.extracted_prompt import ExtractedPrompt
+from src.schemas.prompt import ExtractedPrompt
 
 from .comfy_analysis_v2 import (
     DEFAULT_SCHEMA_PATH,

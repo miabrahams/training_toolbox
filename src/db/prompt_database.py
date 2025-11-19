@@ -30,7 +30,7 @@ from sqlalchemy.orm import (
     Session,
 )
 
-from src.schemas.extracted_prompt import ExtractedPrompt
+from src.schemas.prompt import ExtractedPrompt
 
 
 class Base(DeclarativeBase):

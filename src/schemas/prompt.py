@@ -26,10 +26,10 @@ def _to_float(v):
     except Exception:
         return None
 
-class ExtractedPrompt(BaseModel):
+class ImagePrompt(BaseModel):
+    """Base prompt fields shared across input and output data types."""
+
     model_config = ConfigDict(extra="ignore", populate_by_name=True)
-    schema_version: Optional[str] = None
-    schema_name: Optional[str] = None
 
     positive_prompt: str = Field(..., alias="positive_prompt")
     negative_prompt: Optional[str] = None
@@ -40,8 +40,8 @@ class ExtractedPrompt(BaseModel):
     sampler_name: Optional[str] = None
     scheduler: Optional[str] = None
     seed: Optional[int] = None
-    aspect_ratio: Optional[str] = None
-    swap_dimensions: Optional[bool] = None
+    width: int | None = None
+    height: int | None = None
     loras: Optional[str] = None
     ip_enabled: Optional[bool] = None
     ip_image: Optional[str] = None
@@ -60,7 +60,20 @@ class ExtractedPrompt(BaseModel):
     def _floats(cls, v):
         return _to_float(v)
 
-    @field_validator("ip_enabled", "rescale_cfg", "perp_neg", "swap_dimensions", mode="before")
+    @field_validator("ip_enabled", "rescale_cfg", "perp_neg", mode="before")
+    @classmethod
+    def _bools(cls, v):
+        return _to_bool(v)
+
+class ExtractedPrompt(ImagePrompt):
+    """Prompt extracted directly from a Comfy schema."""
+
+    schema_version: Optional[str] = None
+    schema_name: Optional[str] = None
+    aspect_ratio: str | None = None
+    swap_dimensions: bool | None = None
+
+    @field_validator("swap_dimensions", mode="before")
     @classmethod
     def _bools(cls, v):
         return _to_bool(v)

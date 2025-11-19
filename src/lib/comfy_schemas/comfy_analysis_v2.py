@@ -33,7 +33,7 @@ from pydantic import ValidationError
 
 from src.lib.metadata import read_comfy_metadata
 from src.lib.prompt_parser import clean_prompt
-from src.schemas.extracted_prompt import ExtractedPrompt
+from src.schemas.prompt import ExtractedPrompt
 
 
 # -------- Data structures ---------
