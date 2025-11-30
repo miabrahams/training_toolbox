@@ -13,7 +13,7 @@ from tqdm import tqdm
 import argparse
 from PIL import Image, ImageFile
 
-from src.lib.metadata import tags_from_metadata
+from src.lib.metadata_helpers import tags_from_metadata
 from src.lib.prompt_parser import parse_prompt_attention
 
 # Allow loading of truncated images
