@@ -132,16 +132,44 @@ def metadata_from_file(filename: Path) -> dict:
     info = info_from_file(filename)
     return parse_metadata(info)
 
-# Parse raw info and extract hash
-def hash_from_metadata(metadata: dict) -> str:
-    return metadata['gen_params']['Model hash']
 
-# Extract the model hash from filename
-def hash_from_file(filename):
-    metadata = info_from_file(filename)
-    if metadata is None:
+
+# used in one place
+def comfy_metadata(image_info: dict) -> tuple[dict[str, Any], dict[str, Any]]:
+    prompt = json.loads(image_info['prompt'])
+    workflow = json.loads(image_info['workflow'])
+    return prompt, workflow
+
+# used frequently
+def read_comfy_metadata(filename: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+    image_info = raw_image_info(filename)
+    return comfy_metadata(image_info)
+
+
+# used internally
+def comfy_prompt(filename: Path) -> dict[str, dict[str, Any]]:
+    return json.loads(raw_image_info(filename)['prompt'])
+
+
+
+
+## Helpers, not used anymore - should operate on metadata only
+def comfy_nodes(filename: Path) -> dict[str, dict[str, Any]]:
+    return {id: value for (id, value) in comfy_prompt(filename).items()}
+
+def comfy_unique_node_types(filename: Path) -> list[str]:
+    node_types = [value['class_type'] for value in comfy_prompt(filename).values()]
+    return sorted(set(node_types))
+
+
+# These aren't really about metadata.
+
+def artist_from_filename(filename):
+    match = artist_filename_re.match(filename)
+    if match:
+        return match.group(1)
+    else:
         return None
-    return hash_from_metadata(metadata)
 
 # Extract the artist name from prompt
 # Method = 0: "by [artist]" is at the very end of prompt
@@ -163,32 +191,14 @@ def artist_from_file(filename, method=0):
 
 
 
-# Extract the artist name from filename
-def artist_from_filename(filename):
-    match = artist_filename_re.match(filename)
-    if match:
-        return match.group(1)
-    else:
+## A1111 only
+# Parse raw info and extract hash
+def hash_from_metadata(metadata: dict) -> str:
+    return metadata['gen_params']['Model hash']
+
+# Extract the model hash from filename
+def hash_from_file(filename):
+    metadata = info_from_file(filename)
+    if metadata is None:
         return None
-
-# parse comfyui files
-def comfy_metadata(image_info: dict) -> tuple[dict[str, Any], dict[str, Any]]:
-    prompt = json.loads(image_info['prompt'])
-    workflow = json.loads(image_info['workflow'])
-    return prompt, workflow
-
-def read_comfy_metadata(filename: Path) -> tuple[dict[str, Any], dict[str, Any]]:
-    image_info = raw_image_info(filename)
-    return comfy_metadata(image_info)
-
-def comfy_prompt(filename: Path) -> dict[str, dict[str, Any]]:
-    return json.loads(raw_image_info(filename)['prompt'])
-
-def comfy_nodes(filename: Path) -> dict[str, dict[str, Any]]:
-    return {id: value for (id, value) in comfy_prompt(filename).items()}
-
-def comfy_unique_node_types(filename: Path) -> list[str]:
-    node_types = [value['class_type'] for value in comfy_prompt(filename).values()]
-    return sorted(set(node_types))
-
-
+    return hash_from_metadata(metadata)
