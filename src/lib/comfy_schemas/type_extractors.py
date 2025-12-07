@@ -23,6 +23,17 @@ class TypeExtractor(Protocol):
         """
         ...
 
+class OptionalTextExtractor:
+    """Extracts string values, allowing empty strings."""
+
+    def extract(self, value: Any) -> str | None:
+        if value is None:
+            raise ValueError("Value is None")
+        if isinstance(value, str):
+            if not value.strip():
+                return None
+            return value
+        return str(value)
 
 class TextExtractor:
     """Extracts string values."""
@@ -114,7 +125,7 @@ class ExtractLorasExtractor:
         if not isinstance(value, str):
             raise ValueError("Value is not a string")
         if not value.strip():
-            raise ValueError("Empty string")
+            return "" # ok if no LoRAs
 
         loras = extract_loras(value)
         return " ".join(loras)
@@ -124,6 +135,7 @@ class ExtractLorasExtractor:
 # Registry of available type extractors
 TYPE_EXTRACTORS = {
     "text": TextExtractor(),
+    "optional_text": OptionalTextExtractor(),
     "int": IntExtractor(),
     "float": FloatExtractor(),
     "bool": BoolExtractor(),

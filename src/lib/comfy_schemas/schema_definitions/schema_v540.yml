@@ -1,0 +1,87 @@
+version: "5.40"
+name: "Illustrious"
+comment: Alternate CRPromptText positive encoding
+roles:
+  checkpoint:
+    node_id: 474
+    node_type: "CheckpointLoaderSimple"
+    inputs:
+      ckpt_name: text
+  seed:
+    node_id: 463
+    node_type: "CR Seed"
+    inputs:
+      seed: int
+  positive:
+    node_id: 592
+    node_type: "CR Prompt Text"
+    inputs:
+      prompt: text
+  negative:
+    node_id: 448
+    node_type: "CR Prompt Text"
+    inputs:
+      prompt: text
+  loras:
+    node_id: 340
+    node_type: "Power Prompt (rgthree)"
+    inputs:
+      prompt: optional_text
+  sampler:
+    node_id: 445
+    node_type: "KSampler Config (rgthree)"
+    inputs:
+      steps_total: int
+      cfg: float
+      sampler_name: text
+      scheduler: text
+  aspect_ratio:
+    node_id: 346
+    node_type: "CR SDXL Aspect Ratio"
+    inputs:
+      aspect_ratio: text
+      swap_dimensions: bool
+
+  # These were disabled in the current prompt so aren't working in the test.
+  ip_toggle:
+    node_id: 570
+    node_type: "PrepImageForClipVision"
+    optional_group: ip_adapter
+  ip_weight:
+    node_id: 569
+    optional_group: ip_adapter
+    node_type: "IPAdapterAdvanced"
+    inputs:
+      weight: float
+  ip_image:
+    node_id: 572
+    optional_group: ip_adapter
+    node_type: "Load image with metadata [Crystools]"
+    inputs:
+      image: text
+  rescale_cfg:
+    node_id: 585
+    optional_group: rescale_cfg
+    node_type: "RescaleCFG"
+  perp_neg:
+    node_id: 576
+    optional_group: perp_neg
+    node_type: "PerpNegGuider"
+
+outputs:
+  positive_prompt: [positive, prompt]
+  checkpoint: [checkpoint, ckpt_name]
+  seed: [seed, seed]
+  loras: [loras, prompt]
+  negative_prompt: [negative, prompt]
+  steps: [sampler, steps_total]
+  cfg: [sampler, cfg]
+  sampler_name: [sampler, sampler_name]
+  scheduler: [sampler, scheduler]
+  aspect_ratio: [aspect_ratio, aspect_ratio]
+  swap_dimensions: [aspect_ratio, swap_dimensions]
+  ip_enabled: [ip_toggle, _enabled]
+  ip_image: [ip_image, image]
+  ip_weight: [ip_weight, weight]
+  rescale_cfg: [rescale_cfg, _enabled]
+  perp_neg: [perp_neg, _enabled]
