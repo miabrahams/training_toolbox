@@ -111,6 +111,21 @@ def parse_prompt_attention(text):
 
     return res
 
+def extract_loras(prompt: str) -> List[str]:
+    """Extract LoRA tags from a prompt. Returns full markup like <lora:a.safetensors:0.6>."""
+    loras = re.findall(r'<lora:([^>:]+)(:[^>]+)?>', prompt)
+    for lora in loras: print(lora)
+    return [f"<lora:{lora[0]}{lora[1] if lora[1] else ''}>" for lora in loras]
+
+def strip_lora_markup(prompt: str) -> str:
+    # Remove LoRA markup (e.g., <lora:...>)
+    prompt = re.sub(r'<lora:[^>]+>', ' ', prompt)
+    return prompt.strip()
+
+def strip_weight_markup(prompt: str) -> str:
+    # Remove weight values inside parentheses: remove colon and weights
+    prompt = re.sub(r':\s*[0-9.]+', ' ', prompt)
+    return prompt.strip()
 
 def strip_prompt_markup(prompt: str) -> str:
     """
@@ -120,10 +135,10 @@ def strip_prompt_markup(prompt: str) -> str:
       "<lora:styles/smooth anime 2 style:0.7>" is removed.
       "(masterpiece, best quality:1.1)" becomes "masterpiece, best quality"
     """
-    # Remove LoRA markup (e.g., <lora:...>)
-    prompt = re.sub(r'<lora:[^>]+>', ' ', prompt)
-    # Remove weight values inside parentheses: remove colon and weights
-    prompt = re.sub(r':\s*[0-9.]+', ' ', prompt)
+    prompt = strip_lora_markup(prompt)
+
+    prompt = strip_weight_markup(prompt)
+
     # Optionally remove the remaining parentheses
     prompt = prompt.replace('(', ' ').replace(')', ' ').replace('[', ' ').replace(']', ' ').replace('\\', ' ')
     # Collapse repeated whitespaces

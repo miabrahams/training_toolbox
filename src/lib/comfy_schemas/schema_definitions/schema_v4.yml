@@ -42,7 +42,7 @@ roles:
       swap_dimensions: bool
 
 outputs:
-  positive_prompt: [positive, text]
+  positive_prompt: [positive, prompt]
   checkpoint: [checkpoint, ckpt_name]
   seed: [seed, seed]
   loras: [loras, prompt]

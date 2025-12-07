@@ -91,12 +91,44 @@ class BoolExtractor:
         raise ValueError(f"Cannot convert to bool: {value}")
 
 
+from src.lib.prompt_parser import strip_lora_markup, extract_loras
+
+class StripLorasExtractor:
+    """Removes LoRA markup from a prompt."""
+    def extract(self, value: Any) -> str:
+        if value is None:
+            raise ValueError("Value is None")
+        if not isinstance(value, str):
+            raise ValueError("Value is not a string")
+        if not value.strip():
+            raise ValueError("Empty string")
+        prompt = strip_lora_markup(value)
+        return prompt
+
+
+class ExtractLorasExtractor:
+    """Returns LoRA markup from a prompt."""
+    def extract(self, value: Any) -> str:
+        if value is None:
+            raise ValueError("Value is None")
+        if not isinstance(value, str):
+            raise ValueError("Value is not a string")
+        if not value.strip():
+            raise ValueError("Empty string")
+
+        loras = extract_loras(value)
+        return " ".join(loras)
+
+
+
 # Registry of available type extractors
 TYPE_EXTRACTORS = {
     "text": TextExtractor(),
     "int": IntExtractor(),
     "float": FloatExtractor(),
     "bool": BoolExtractor(),
+    "strip_loras": StripLorasExtractor(),
+    "extract_loras": ExtractLorasExtractor(),
 }
 
 
@@ -116,6 +148,6 @@ def get_extractor(type_name: str) -> TypeExtractor:
     if extractor is None:
         available = ", ".join(sorted(TYPE_EXTRACTORS.keys()))
         raise ValueError(
-            f"Unknown type '{type_name}'. Available types: {available}"
+            f"Unknown extractor '{type_name}'. Available: {available}"
         )
     return extractor
