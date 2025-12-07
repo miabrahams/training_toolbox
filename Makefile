@@ -15,5 +15,9 @@ clean:
 install:
 	uv sync
 
+# Example of testing the schema extractor
+test_extractor:
+	python -m src.lib.comfy_schemas.test_extractor test_schema_v5.png schema_v5.yml
+
 api:
 	uvicorn api:app --reload --host 127.0.0.1 --port 8000

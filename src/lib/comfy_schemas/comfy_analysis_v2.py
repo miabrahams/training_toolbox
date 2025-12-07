@@ -34,6 +34,13 @@ from pydantic import ValidationError
 from src.lib.metadata import read_comfy_metadata
 from src.lib.prompt_parser import clean_prompt
 from src.schemas.prompt import ExtractedPrompt
+from .errors import (
+    NodeNotFoundError,
+    NodeTypeMismatchError,
+    MissingInputError,
+    EmptyValueError,
+    LinkedInputError,
+)
 
 
 # -------- Data structures ---------
@@ -144,8 +151,11 @@ def _validate_role_node(role: str, spec: RoleSpec, node: Dict[str, Any]) -> None
     if spec.node_type:
         class_type = node.get("class_type")
         if class_type != spec.node_type:
-            raise ValueError(
-                f"Node type mismatch for role '{role}': expected '{spec.node_type}', got '{class_type}'"
+            raise NodeTypeMismatchError(
+                role=role,
+                node_id=spec.node_id,
+                expected_type=spec.node_type,
+                actual_type=class_type or "UNKNOWN"
             )
 
 
@@ -166,9 +176,7 @@ def _determine_group_presence(
         if node is None:
             if spec.optional_group:
                 continue
-            raise ValueError(
-                f"Node for role '{role_name}' (id={spec.node_id}) not found in prompt graph"
-            )
+            raise NodeNotFoundError(role=role_name, node_id=spec.node_id)
 
         _validate_role_node(role_name, spec, node)
         resolved_nodes[role_name] = node
@@ -191,20 +199,31 @@ def _extract_value(
     field = spec.inputs.get(logical_key, logical_key)
 
     if field not in inputs:
-        raise ValueError(
-            f"Missing input '{field}' on node role '{role}' (id={spec.node_id}) for output '{output_name}'"
+        available_inputs = list(inputs.keys())
+        raise MissingInputError(
+            role=role,
+            node_id=spec.node_id,
+            input_field=field,
+            output_field=output_name,
+            available_inputs=available_inputs
         )
 
     value = inputs.get(field)
     if isinstance(value, list):
         # Comfy links appear as lists; schema expects literal values for these outputs
-        raise ValueError(
-            f"Input '{field}' on role '{role}' is a link/reference, expected a literal value for '{output_name}'"
+        linked_node_id = value[0] if value else None
+        raise LinkedInputError(
+            role=role,
+            input_field=field,
+            output_field=output_name,
+            linked_node_id=str(linked_node_id) if linked_node_id is not None else None
         )
 
     if value is None or (isinstance(value, str) and value.strip() == ""):
-        raise ValueError(
-            f"Empty value for '{output_name}' from role '{role}' (input '{field}')"
+        raise EmptyValueError(
+            role=role,
+            input_field=field,
+            output_field=output_name
         )
 
     return value

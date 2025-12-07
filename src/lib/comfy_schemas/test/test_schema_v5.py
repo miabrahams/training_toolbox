@@ -10,11 +10,11 @@ from src.lib.comfy_schemas.comfy_analysis_v2 import extract_from_prompt
 
 
 # TODO: better relative pathing...
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_PATH = (
-    ROOT / "lib" / "comfy_schemas" / "schema_definitions" / "schema_v5.yml"
+    ROOT / "schema_definitions" / "schema_v5.yml"
 )
-EXPORT_PATH = ROOT / "lib" / "comfy_schemas" / "test" / "data" / "test_schema_v5.png"
+EXPORT_PATH = ROOT / "test" / "data" / "test_schema_v5.png"
 
 
 def _run_validation() -> tuple[str, str]:
