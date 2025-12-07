@@ -1,26 +1,38 @@
 """
-Schema-driven ComfyUI workflow parser
+Schema-driven ComfyUI workflow parser (v2 - Type-based)
 
-This module validates and extracts fields from a ComfyUI prompt graph (the JSON
-stored under an image's "prompt" metadata) according to a YAML schema.
+This module validates and extracts fields from a ComfyUI prompt graph according to
+a YAML schema that specifies field types and extraction rules.
 
-- All outputs declared in the schema are required unless their role belongs to an
-  optional group that is entirely absent from the prompt graph.
-- For optional groups, if any role in the group exists, the group is considered
-  present; outputs referencing missing roles within a present group cause a
-  validation error.
-- Role type checks are enforced when a role's node_type is specified.
-- Special output input key "_enabled" yields a presence flag (True) when the
-  corresponding role's node is present; it is omitted otherwise.
+Schema Format:
+  roles:
+    <role_name>:
+      node_id: <node_id_in_graph>
+      node_type: <expected_class_type>  # optional
+      inputs:
+        <field_name>: <type>  # e.g., "cfg: float", "seed: int"
+      optional_group: <group_name>  # optional
+
+  outputs:
+    <output_field>: [<role>, <field_name>]
+
+Type System:
+  - text: String extraction
+  - int: Integer extraction
+  - float: Float extraction
+  - bool: Boolean extraction
+  - _enabled: Special type that returns True if the role's node exists
+
+Optional Groups:
+  - If any role in a group exists, the group is considered present
+  - Outputs for roles in absent groups are omitted
+  - Outputs for roles in present groups are required
 
 Public API:
   extract_from_prompt(prompt_graph: dict, schema_path: str | Path) -> ExtractedPrompt
   extract_from_file(filename: Path, schema_path: str | Path) -> ExtractedPrompt
   extract_latest_from_prompt(prompt_graph: dict) -> ExtractedPrompt
   extract_latest_from_file(filename: Path) -> ExtractedPrompt
-
-Notes:
-- The default schema points to the latest bundled schema file.
 """
 from __future__ import annotations
 
@@ -38,12 +50,11 @@ from .errors import (
     NodeNotFoundError,
     NodeTypeMismatchError,
     MissingInputError,
-    EmptyValueError,
+    # EmptyValueError,
     LinkedInputError,
 )
+from .type_extractors import get_extractor
 
-
-# -------- Data structures ---------
 
 @dataclass(frozen=True)
 class RoleSpec:
@@ -52,39 +63,41 @@ class RoleSpec:
     Attributes:
         node_id: The node key in the prompt graph (stringified).
         node_type: Expected class_type for the node, or None to skip type check.
-        inputs: Mapping from logical input keys to actual field names in node["inputs"].
-        optional_group: Group name used to bundle optional roles. If any role in a
-                        group is present, the group is considered present.
+        inputs: Mapping from field name to type name (e.g., {"cfg": "float", "seed": "int"}).
+        optional_group: Group name used to bundle optional roles.
     """
 
     node_id: str
     node_type: Optional[str]
-    inputs: Mapping[str, str]
+    inputs: Mapping[str, str]  # field_name -> type_name
     optional_group: Optional[str] = None
 
 
 @dataclass(frozen=True)
 class SchemaSpec:
-    """Holds the parsed YAML schema in a convenient, typed form."""
+    """In-memory representation of the schema."""
 
     version: str
     name: str
     roles: Dict[str, RoleSpec]
-    outputs: Dict[str, Tuple[str, str]]  # output_name -> (role, input_key)
+    outputs: Dict[str, Tuple[str, str]]  # output_name -> (role, field_name)
     groups: Dict[str, Set[str]]  # optional group -> set(role names)
 
 
 def _as_str(value: Any) -> str:
+    """Convert value to string, handling None."""
     return str(value) if value is not None else ""
 
 
 def _load_schema(schema_path: str | Path) -> SchemaSpec:
     """Load and validate the YAML schema from disk.
 
-    The loader normalizes:
-    - node_id to string (Comfy prompt dict uses string keys)
-    - outputs into 2-tuples (role, input_key)
-    - optional groups to a mapping of group -> roles
+    The schema format uses field_name -> type_name mappings in the inputs section.
+    For example:
+        inputs:
+          cfg: float
+          seed: int
+          text: text
     """
     with open(schema_path, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
@@ -114,17 +127,17 @@ def _load_schema(schema_path: str | Path) -> SchemaSpec:
     outputs: Dict[str, Tuple[str, str]] = {}
     for out_name, spec in (data.get("outputs", {}) or {}).items():
         if isinstance(spec, list) and len(spec) == 2:
-            role, input_key = spec
+            role, field_name = spec
         elif isinstance(spec, dict):
             role = spec.get("role")
-            input_key = spec.get("input")
+            field_name = spec.get("field") or spec.get("input")
         else:
             raise ValueError(f"Invalid output mapping for '{out_name}': {spec}")
 
-        if not role or not input_key:
-            raise ValueError(f"Output '{out_name}' missing role or input definition")
+        if not role or not field_name:
+            raise ValueError(f"Output '{out_name}' missing role or field definition")
 
-        outputs[out_name] = (str(role), str(input_key))
+        outputs[out_name] = (str(role), str(field_name))
 
     return SchemaSpec(
         version=_as_str(data.get("version", "")),
@@ -191,46 +204,88 @@ def _extract_value(
     role: str,
     spec: RoleSpec,
     node: Dict[str, Any],
-    logical_key: str,
+    field_name: str,
     output_name: str,
 ) -> Any:
-    """Extract and validate a value from a node's inputs for a given logical key."""
-    inputs = node.get("inputs", {}) or {}
-    field = spec.inputs.get(logical_key, logical_key)
+    """Extract and transform a value from a node's inputs using type extractors.
 
-    if field not in inputs:
+    Args:
+        role: The role name
+        spec: The role specification
+        node: The ComfyUI node dictionary
+        field_name: The field name to extract
+        output_name: The output field name (for error messages)
+
+    Returns:
+        The extracted and transformed value
+
+    Raises:
+        MissingInputError: If the field is not in the node's inputs
+        LinkedInputError: If the field is a link to another node
+        ValueError: If extraction/transformation fails
+    """
+    inputs = node.get("inputs", {}) or {}
+
+    # Check if field exists
+    if field_name not in inputs:
         available_inputs = list(inputs.keys())
         raise MissingInputError(
             role=role,
             node_id=spec.node_id,
-            input_field=field,
+            input_field=field_name,
             output_field=output_name,
             available_inputs=available_inputs
         )
 
-    value = inputs.get(field)
+    # Get raw value
+    value = inputs[field_name]
+
+    # Check if it's a link to another node
     if isinstance(value, list):
-        # Comfy links appear as lists; schema expects literal values for these outputs
         linked_node_id = value[0] if value else None
         raise LinkedInputError(
             role=role,
-            input_field=field,
+            input_field=field_name,
             output_field=output_name,
             linked_node_id=str(linked_node_id) if linked_node_id is not None else None
         )
 
-    if value is None or (isinstance(value, str) and value.strip() == ""):
-        raise EmptyValueError(
-            role=role,
-            input_field=field,
-            output_field=output_name
+    # Get the type for this field
+    type_name = spec.inputs.get(field_name)
+    if type_name is None:
+        raise ValueError(
+            f"Field '{field_name}' not defined in role '{role}' inputs. "
+            f"Available fields: {list(spec.inputs.keys())}"
         )
 
-    return value
+    # Apply type extraction
+    try:
+        extractor = get_extractor(type_name)
+        return extractor.extract(value)
+    except ValueError as e:
+        # Wrap extraction errors with context
+        raise ValueError(
+            f"Failed to extract '{output_name}' from role '{role}' field '{field_name}' "
+            f"as type '{type_name}': {e}"
+        ) from e
 
 
 def extract_from_prompt(prompt_graph: Dict[str, Any], schema_path: str | Path) -> ExtractedPrompt:
-    """Validate the prompt graph against the schema and produce an ExtractedPrompt."""
+    """Validate the prompt graph against the schema and produce an ExtractedPrompt.
+
+    Args:
+        prompt_graph: The ComfyUI prompt dictionary (from image metadata)
+        schema_path: Path to the YAML schema file
+
+    Returns:
+        ExtractedPrompt instance with all extracted fields
+
+    Raises:
+        NodeNotFoundError: If a required node is missing
+        NodeTypeMismatchError: If a node has the wrong type
+        MissingInputError: If a required input field is missing
+        ValueError: For other validation errors
+    """
     schema = _load_schema(schema_path)
     _validate_outputs(schema)
 
@@ -242,7 +297,7 @@ def extract_from_prompt(prompt_graph: Dict[str, Any], schema_path: str | Path) -
         "schema_name": schema.name,
     }
 
-    for out_name, (role, logical_key) in schema.outputs.items():
+    for out_name, (role, field_name) in schema.outputs.items():
         spec = schema.roles.get(role)
         if spec is None:
             raise ValueError(f"Output '{out_name}' references unknown role '{role}'")
@@ -251,14 +306,14 @@ def extract_from_prompt(prompt_graph: Dict[str, Any], schema_path: str | Path) -
         if spec.optional_group and not group_present.get(spec.optional_group, False):
             continue
 
-        # Presence flag shortcut
-        if logical_key == "_enabled":
+        # Special handling for _enabled pseudo-type
+        if field_name == "_enabled":
             if role in resolved_nodes:
                 result[out_name] = True
             # else: omit when not present (optional group absence handled above)
             continue
 
-        # For non-presence outputs, the role must have been resolved at this point
+        # For regular outputs, the role must have been resolved at this point
         node = resolved_nodes.get(role)
         if node is None:
             group_msg = f" in optional group '{spec.optional_group}'" if spec.optional_group else ""
@@ -270,11 +325,12 @@ def extract_from_prompt(prompt_graph: Dict[str, Any], schema_path: str | Path) -
             role=role,
             spec=spec,
             node=node,
-            logical_key=logical_key,
+            field_name=field_name,
             output_name=out_name,
         )
         result[out_name] = value
 
+    # Clean the positive prompt if present
     if "positive_prompt" not in result:
         raise ValueError(
             "Schema outputs missing required field 'positive_prompt' for cleaning"
@@ -282,6 +338,7 @@ def extract_from_prompt(prompt_graph: Dict[str, Any], schema_path: str | Path) -
 
     result["cleaned_prompt"] = clean_prompt(result["positive_prompt"])
 
+    # Validate with Pydantic
     try:
         return ExtractedPrompt(**result)
     except ValidationError as ve:
@@ -291,6 +348,7 @@ def extract_from_prompt(prompt_graph: Dict[str, Any], schema_path: str | Path) -
 
 
 def extract_from_file(filename: Path, schema_path: str | Path) -> ExtractedPrompt:
+    """Extract from an image file using a specific schema."""
     prompt, _ = read_comfy_metadata(filename)
     return extract_from_prompt(prompt, schema_path)
 
@@ -302,10 +360,12 @@ DEFAULT_SCHEMA_PATH = (
 
 
 def extract_latest_from_prompt(prompt_graph: Dict[str, Any]) -> ExtractedPrompt:
+    """Extract using the latest default schema."""
     return extract_from_prompt(prompt_graph, DEFAULT_SCHEMA_PATH)
 
 
 def extract_latest_from_file(filename: Path) -> ExtractedPrompt:
+    """Extract from an image file using the latest default schema."""
     return extract_from_file(filename, DEFAULT_SCHEMA_PATH)
 
 

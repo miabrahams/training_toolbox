@@ -5,12 +5,12 @@ roles:
     node_id: 474
     node_type: "CheckpointLoaderSimple"
     inputs:
-      ckpt_name: ckpt_name
+      ckpt_name: text
   seed:
     node_id: 463
     node_type: "CR Seed"
     inputs:
-      seed: seed
+      seed: int
   positive:
     node_id: 553
     node_type: "PCLazyTextEncode"
@@ -20,26 +20,26 @@ roles:
     node_id: 448
     node_type: "CR Prompt Text"
     inputs:
-      prompt: prompt
+      prompt: text
   loras:
     node_id: 340
     node_type: "Power Prompt (rgthree)"
     inputs:
-      prompt: prompt
+      prompt: text
   sampler:
     node_id: 445
     node_type: "KSampler Config (rgthree)"
     inputs:
-      steps_total: steps_total
-      cfg: cfg
-      sampler_name: sampler_name
-      scheduler: scheduler
+      steps_total: int
+      cfg: float
+      sampler_name: text
+      scheduler: text
   aspect_ratio:
     node_id: 346
     node_type: "CR SDXL Aspect Ratio"
     inputs:
-      aspect_ratio: aspect_ratio
-      swap_dimensions: swap_dimensions
+      aspect_ratio: text
+      swap_dimensions: bool
 
   # These were disabled in the current prompt so aren't working in the test.
   ip_toggle:
@@ -51,13 +51,13 @@ roles:
     optional_group: ip_adapter
     node_type: "IPAdapterAdvanced"
     inputs:
-      weight: weight
+      weight: float
   ip_image:
     node_id: 572
     optional_group: ip_adapter
     node_type: "Load image with metadata [Crystools]"
     inputs:
-      image: image
+      image: text
   rescale_cfg:
     node_id: 585
     optional_group: rescale_cfg
