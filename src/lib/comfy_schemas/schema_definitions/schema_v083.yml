@@ -1,33 +1,32 @@
-version: "0.91"
-name: "ComfyUI example SDXL workflow -> Pony 2"
-comment: More advanced tests
+version: "v0.83"
+name: "Old Comfyui Win"
+comment: Different ckpt node
 roles:
   checkpoint:
-    node_id: 173
-    node_type: "CheckpointLoaderSimple"
+    node_id: 75
+    node_type: "Checkpoint Loader"
     inputs:
       ckpt_name: text
   positive:
-    node_id: 159
-    node_type: "CLIPTextEncode"
+    node_id: 89
+    node_type: "DPCombinatorialGenerator"
     inputs:
       text: text
   negative:
-    node_id: 7
+    node_id: 4
     node_type: "CLIPTextEncode"
     inputs:
-      text: text
+      text: optional_text
   sampler:
-    node_id: 70
+    node_id: 54
     node_type: "KSampler"
     inputs:
       steps: int
       cfg: float
-      noise_seed: int
       sampler_name: text
       scheduler: text
   latent:
-    node_id: 5
+    node_id: 6
     node_type: "EmptyLatentImage"
     inputs:
       width: int
@@ -35,6 +34,7 @@ roles:
 
 outputs:
   positive_prompt: [positive, text]
+  negative_prompt: [negative, text]
   checkpoint: [checkpoint, ckpt_name]
   steps: [sampler, steps]
   cfg: [sampler, cfg]

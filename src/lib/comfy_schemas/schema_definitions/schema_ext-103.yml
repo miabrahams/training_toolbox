@@ -1,10 +1,10 @@
-version: "v0.81"
-name: "Old Comfyui Win"
-comment: Different ckpt node
+version: "ext-103"
+name: "Weird setup with slerp latents"
+comment:
 roles:
   checkpoint:
-    node_id: 50
-    node_type: "Checkpoint Loader"
+    node_id: 1
+    node_type: "CheckpointLoaderSimple"
     inputs:
       ckpt_name: text
   positive:
@@ -16,13 +16,14 @@ roles:
     node_id: 4
     node_type: "CLIPTextEncode"
     inputs:
-      text: optional_text
+      text: text
   sampler:
-    node_id: 5
-    node_type: "KSampler"
+    node_id: 50
+    node_type: "KSamplerAdvanced"
     inputs:
       steps: int
       cfg: float
+      noise_seed: int
       sampler_name: text
       scheduler: text
   latent:
@@ -34,7 +35,6 @@ roles:
 
 outputs:
   positive_prompt: [positive, text]
-  negative_prompt: [negative, text]
   checkpoint: [checkpoint, ckpt_name]
   steps: [sampler, steps]
   cfg: [sampler, cfg]

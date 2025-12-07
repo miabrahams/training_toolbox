@@ -1,19 +1,24 @@
-version: "v0.90"
+version: "v0.82"
 name: "Old Comfyui Win"
-comment: Some nodes used conditioning_averages. Multiple loaders were added in these graphs, without Prompt examination ckpt is not reliable
+comment: Different ckpt node
 roles:
   checkpoint:
-    node_id: 102
+    node_id: 97
     node_type: "Checkpoint Loader"
     inputs:
       ckpt_name: text
   positive:
-    node_id: 98
+    node_id: 43
     node_type: "CLIPTextEncode"
     inputs:
       text: text
+  negative:
+    node_id: 4
+    node_type: "CLIPTextEncode"
+    inputs:
+      text: optional_text
   sampler:
-    node_id: 54
+    node_id: 5
     node_type: "KSampler"
     inputs:
       steps: int
@@ -29,6 +34,7 @@ roles:
 
 outputs:
   positive_prompt: [positive, text]
+  negative_prompt: [negative, text]
   checkpoint: [checkpoint, ckpt_name]
   steps: [sampler, steps]
   cfg: [sampler, cfg]
@@ -36,10 +42,3 @@ outputs:
   scheduler: [sampler, scheduler]
   width: [latent, width]
   height: [latent, height]
-
-
-
-Error processing /home/abrahams/ComfyUI/output/genericpony_v20/CuteBat_000001.png: Extraction of fields from prompt failed
-Progress: 59.0% - Processing prompts 5131/8690
-Error processing /home/abrahams/ComfyUI/output/genericpony_v20/SharkSquirt_000007.png: Extraction of fields from prompt failed
-Progress: 59.1% - Processing prompts 5132/8690

@@ -1,5 +1,5 @@
-version: "4.50"
-name: "Illustrious"
+version: "v4.50"
+name: "Illustrious without IPAdapter"
 roles:
   checkpoint:
     node_id: 474

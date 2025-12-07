@@ -1,4 +1,4 @@
-version: "5.40"
+version: "alt-v5.40"
 name: "Illustrious"
 comment: Alternate CRPromptText positive encoding
 roles:

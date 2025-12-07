@@ -1,6 +1,6 @@
-version: "v2.50"
-name: "New nodes, no color in power prompt, primitives for ksampler params"
-comment: this is where that stupid CLIP Text Encode garbage came from!!
+version: "v1.70"
+name: "Simplified wf - alt"
+comment: High node numbers but stuff is deleted.
 roles:
   checkpoint:
     node_id: 173
@@ -8,17 +8,17 @@ roles:
     inputs:
       ckpt_name: text
   positive:
-    node_id: 340
+    node_id: 442
     node_type: "Power Prompt (rgthree)"
     inputs:
       prompt: strip_loras
   negative:
-    node_id: 7
+    node_id: 439
     node_type: "CLIPTextEncode"
     inputs:
       text: optional_text
   loras:
-    node_id: 340
+    node_id: 442
     node_type: "Power Prompt (rgthree)"
     inputs:
       prompt: extract_loras
@@ -31,12 +31,12 @@ roles:
       sampler_name: text
       scheduler: text
       seed: int
-  aspect_ratio:
-    node_id: 346
-    node_type: "CR SDXL Aspect Ratio"
+  latent:
+    node_id: 430
+    node_type: "EmptyLatentImage"
     inputs:
-      aspect_ratio: text
-      swap_dimensions: bool
+      width: int
+      height: int
 
 outputs:
   positive_prompt: [positive, prompt]
@@ -48,5 +48,5 @@ outputs:
   cfg: [ksampler, cfg]
   sampler_name: [ksampler, sampler_name]
   scheduler: [ksampler, scheduler]
-  aspect_ratio: [aspect_ratio, aspect_ratio]
-  swap_dimensions: [aspect_ratio, swap_dimensions]
+  width: [latent, width]
+  height: [latent, height]

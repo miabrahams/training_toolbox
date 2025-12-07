@@ -1,32 +1,33 @@
-version: "0.80"
-name: "Old Comfyui Win"
-comment: Checkpoint is node 1 here!
+version: "v0.21"
+name: "ComfyUI example SDXL workflow -> Pony 2"
+comment: More tests
 roles:
   checkpoint:
-    node_id: 1
+    node_id: 173
     node_type: "CheckpointLoaderSimple"
     inputs:
       ckpt_name: text
   positive:
-    node_id: 43
+    node_id: 159
     node_type: "CLIPTextEncode"
     inputs:
       text: text
   negative:
-    node_id: 4
+    node_id: 7
     node_type: "CLIPTextEncode"
     inputs:
       text: text
   sampler:
-    node_id: 5
+    node_id: 70
     node_type: "KSampler"
     inputs:
       steps: int
       cfg: float
+      noise_seed: int
       sampler_name: text
       scheduler: text
   latent:
-    node_id: 6
+    node_id: 5
     node_type: "EmptyLatentImage"
     inputs:
       width: int
@@ -34,7 +35,6 @@ roles:
 
 outputs:
   positive_prompt: [positive, text]
-  negative_prompt: [negative, text]
   checkpoint: [checkpoint, ckpt_name]
   steps: [sampler, steps]
   cfg: [sampler, cfg]

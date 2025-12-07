@@ -1,0 +1,40 @@
+version: "ext-501"
+name: "Wildcard"
+comment: Chinese in group nodes
+roles:
+  EfficientLoader:
+    node_id: 310
+    node_type: "Efficient Loader"
+    inputs:
+      ckpt_name: text
+      negative: text
+  positive:
+    node_id: 309
+    node_type: "ImpactWildcardProcessor"
+    inputs:
+      populated_text: text
+  sampler:
+    node_id: 316
+    node_type: "easy fullkSampler"
+    inputs:
+      steps: int
+      cfg: float
+      sampler_name: text
+      scheduler: text
+  aspect_ratio:
+    node_id: 283
+    node_type: "CR Aspect Ratio"
+    inputs:
+      aspect_ratio: text
+      swap_dimensions: bool
+
+outputs:
+  positive_prompt: [positive, populated_text]
+  negative_prompt: [EfficientLoader, negative]
+  checkpoint: [EfficientLoader, ckpt_name]
+  steps: [sampler, steps]
+  cfg: [sampler, cfg]
+  sampler_name: [sampler, sampler_name]
+  scheduler: [sampler, scheduler]
+  aspect_ratio: [aspect_ratio, aspect_ratio]
+  swap_dimensions: [aspect_ratio, swap_dimensions]

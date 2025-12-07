@@ -1,31 +1,31 @@
-version: "0.91"
-name: "ComfyUI example SDXL workflow"
-comment: Very first Pony tests
+version: "v1.10"
+name: "First graph with known lineage - SDXL Notes still present"
+comment: Added group nodes
 roles:
   checkpoint:
-    node_id: 4
+    node_id: 173
     node_type: "CheckpointLoaderSimple"
     inputs:
       ckpt_name: text
   positive:
-    node_id: 6
-    node_type: "CLIPTextEncode"
+    node_id: 185
+    node_type: "DPCombinatorialGenerator"
     inputs:
       text: text
   negative:
     node_id: 7
     node_type: "CLIPTextEncode"
     inputs:
-      text: text
-  sampler:
-    node_id: 10
-    node_type: "KSamplerAdvanced"
+      text: optional_text
+  ksampler:
+    node_id: 70
+    node_type: "KSampler"
     inputs:
       steps: int
       cfg: float
-      noise_seed: int
       sampler_name: text
       scheduler: text
+      seed: int
   latent:
     node_id: 5
     node_type: "EmptyLatentImage"
@@ -35,10 +35,11 @@ roles:
 
 outputs:
   positive_prompt: [positive, text]
+  negative_prompt: [negative, text]
   checkpoint: [checkpoint, ckpt_name]
-  steps: [sampler, steps]
-  cfg: [sampler, cfg]
-  sampler_name: [sampler, sampler_name]
-  scheduler: [sampler, scheduler]
+  steps: [ksampler, steps]
+  cfg: [ksampler, cfg]
+  sampler_name: [ksampler, sampler_name]
+  scheduler: [ksampler, scheduler]
   width: [latent, width]
   height: [latent, height]

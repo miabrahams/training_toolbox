@@ -1,32 +1,33 @@
-version: "v0.81"
-name: "Old Comfyui Win"
-comment: Different ckpt node
+version: "v0.40"
+name: "KSampler is node 3. Unsure whether nodes at this point have direct lineage"
+comment: More advanced tests
 roles:
   checkpoint:
-    node_id: 50
-    node_type: "Checkpoint Loader"
+    node_id: 4
+    node_type: "CheckpointLoaderSimple"
     inputs:
       ckpt_name: text
   positive:
-    node_id: 43
+    node_id: 12
     node_type: "CLIPTextEncode"
     inputs:
       text: text
   negative:
-    node_id: 4
+    node_id: 7
     node_type: "CLIPTextEncode"
     inputs:
-      text: optional_text
+      text: text
   sampler:
-    node_id: 5
+    node_id: 3
     node_type: "KSampler"
     inputs:
       steps: int
       cfg: float
+      noise_seed: int
       sampler_name: text
       scheduler: text
   latent:
-    node_id: 6
+    node_id: 5
     node_type: "EmptyLatentImage"
     inputs:
       width: int
@@ -34,7 +35,6 @@ roles:
 
 outputs:
   positive_prompt: [positive, text]
-  negative_prompt: [negative, text]
   checkpoint: [checkpoint, ckpt_name]
   steps: [sampler, steps]
   cfg: [sampler, cfg]

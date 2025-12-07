@@ -1,5 +1,5 @@
-version: "2.60"
-name: "Pony with old nodes. Used CRSeed"
+version: "v2.60"
+name: "Pony with old nodes. Used CRSeed. Maybe should call this an alt"
 Comment:
 roles:
   checkpoint:

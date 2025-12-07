@@ -1,14 +1,14 @@
-version: "v0.81"
-name: "Old Comfyui Win"
-comment: Different ckpt node
+version: "ext-102"
+name: "Checkpoint is #1"
+comment:
 roles:
   checkpoint:
-    node_id: 50
-    node_type: "Checkpoint Loader"
+    node_id: 1
+    node_type: "CheckpointLoaderSimple"
     inputs:
       ckpt_name: text
   positive:
-    node_id: 43
+    node_id: 3
     node_type: "CLIPTextEncode"
     inputs:
       text: text
@@ -16,13 +16,14 @@ roles:
     node_id: 4
     node_type: "CLIPTextEncode"
     inputs:
-      text: optional_text
+      text: text
   sampler:
     node_id: 5
     node_type: "KSampler"
     inputs:
       steps: int
       cfg: float
+      noise_seed: int
       sampler_name: text
       scheduler: text
   latent:
@@ -34,7 +35,6 @@ roles:
 
 outputs:
   positive_prompt: [positive, text]
-  negative_prompt: [negative, text]
   checkpoint: [checkpoint, ckpt_name]
   steps: [sampler, steps]
   cfg: [sampler, cfg]

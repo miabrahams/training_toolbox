@@ -1,6 +1,6 @@
-version: "1.60"
-name: "Pony raw setup with CustomAdvanced"
-comment: No group nodes
+version: "v1.30"
+name: "Pony raw setup with KSamplerCustomAdvanced"
+comment: No group nodes, probably an experimental branch
 roles:
   checkpoint:
     node_id: 72

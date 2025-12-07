@@ -1,5 +1,5 @@
-version: "2.50"
-name: "IndigoFurryXL with old nodes. Seed was a primitive instead of CR"
+version: "v2.50"
+name: "Seed was a primitive instead of CR in this version"
 Comment:
 roles:
   checkpoint:

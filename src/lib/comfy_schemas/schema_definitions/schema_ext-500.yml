@@ -1,0 +1,42 @@
+version: "ext-500"
+name: "Wildcard"
+comment: Wildcard output is not extracted
+roles:
+  checkpoint:
+    node_id: 359
+    node_type: "CheckpointLoaderSimple"
+    inputs:
+      ckpt_name: text
+  positive:
+    node_id: 368
+    node_type: "easy prompt"
+    inputs:
+      prompt: text
+  negative:
+    node_id: 363
+    node_type: "easy negative"
+    inputs:
+      negative: optional_text
+  sampler:
+    node_id: 316
+    node_type: "easy fullkSampler"
+    inputs:
+      steps: int
+      cfg: float
+      sampler_name: text
+      scheduler: text
+  EasyLoader:
+    node_id: 329
+    node_type: "easy fullLoader"
+    inputs:
+      resolution: text
+
+outputs:
+  positive_prompt: [positive, prompt]
+  negative_prompt: [negative, negative]
+  checkpoint: [checkpoint, ckpt_name]
+  steps: [sampler, steps]
+  cfg: [sampler, cfg]
+  sampler_name: [sampler, sampler_name]
+  scheduler: [sampler, scheduler]
+  aspect_ratio: [EasyLoader, resolution]
