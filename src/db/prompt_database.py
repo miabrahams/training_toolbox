@@ -168,29 +168,48 @@ class PromptDatabase:
             )
             return [(fp, pr) for fp, pr in session.execute(stmt).all()][::-1] # reverse for latest first
 
-    def upsert_prompt_text(self, file_path: str, prompt: ExtractedPrompt, **extras):
-        """Upsert core prompt fields; extras may include any PromptText columns."""
+    def upsert_prompt(self, file_path: str, prompt: ExtractedPrompt) -> bool:
+        """Upsert core prompt fields; extras may include any PromptText columns. Returns true if a new row was created."""
+        created = False
         with self.SessionLocal.begin() as session:
             existing: Optional[PromptFields] = (
                 session.execute(
                     select(PromptFields).where(PromptFields.file_path == file_path)
                 ).scalar_one_or_none()
             )
+            payload = {
+                "positive_prompt": prompt.positive_prompt,
+                "negative_prompt": prompt.negative_prompt,
+                "cleaned_prompt": prompt.cleaned_prompt,
+                "checkpoint": prompt.checkpoint,
+                "steps": prompt.steps,
+                "cfg": prompt.cfg,
+                "sampler_name": prompt.sampler_name,
+                "scheduler": prompt.scheduler,
+                "seed": prompt.seed,
+                "width": prompt.width,
+                "height": prompt.height,
+                "aspect_ratio": prompt.aspect_ratio,
+                "swap_dimensions": prompt.swap_dimensions,
+                "loras": prompt.loras,
+                "ip_enabled": prompt.ip_enabled,
+                "ip_image": prompt.ip_image,
+                "ip_weight": prompt.ip_weight,
+                "rescale_cfg": prompt.rescale_cfg,
+                "perp_neg": prompt.perp_neg,
+                "processed": 1,
+            }
+
             if existing:
-                existing.positive_prompt = prompt.positive_prompt
-                for k, v in extras.items():
-                    if hasattr(existing, k):
-                        setattr(existing, k, v)
-                existing.processed = 1
+                for k, v in payload.items():
+                    setattr(existing, k, v)
                 existing.last_updated = func.current_timestamp()
             else:
-                payload = dict(
-                    file_path=file_path,
-                    positive_prompt=prompt.positive_prompt,
-                    processed=1,
-                )
-                payload.update({k: v for k, v in extras.items() if hasattr(PromptFields, k)})
-                session.add(PromptFields(**payload))
+                payload["file_path"] = file_path
+                created = True
+
+            session.add(PromptFields(**payload))
+            return created
 
     def load_prompts(self) -> List[Tuple[str, str]]:
         """

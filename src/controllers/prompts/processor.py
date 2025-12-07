@@ -43,7 +43,7 @@ class PromptProcessor:
             try:
                 prompt = json.loads(prompt_json)
                 extracted = extract_from_json(prompt)
-                self.db.upsert_prompt_text(file_path, extracted)
+                self.db.upsert_prompt(file_path, extracted)
                 stats.processed += 1
             except json.JSONDecodeError:
                 stats.errors += 1
