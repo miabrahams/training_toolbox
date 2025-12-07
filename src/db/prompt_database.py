@@ -54,7 +54,7 @@ class PromptFields(Base):
     # Reference to source image/prompt
     file_path: Mapped[str] = mapped_column(String, ForeignKey("prompts.file_path"), unique=True, index=True)
 
-    # Surrogate key for fast random selection
+    # for conveniece only - not guaranteed to be stable across databases
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
     # Usually matches filename

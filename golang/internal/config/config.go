@@ -30,6 +30,8 @@ const (
 	ShowCountKey      = "search.show_count"
 	LogLevelKey       = "log.level"
 
+	ExtractPathsKey = "extract_paths"
+
 	StylesKey    = "styles"
 	PrefixKey    = ".prefix"
 	PostfixKey   = ".postfix"
@@ -72,6 +74,10 @@ func (c Config) SearchTags() []string  { return c.k.Strings(SearchTagsKey) }
 func (c Config) ExcludeTags() []string { return c.k.Strings(ExcludeTagsKey) }
 func (c Config) Limit() int            { return c.k.Int(LimitKey) }
 func (c Config) Randomize() bool       { return c.k.Bool(RandomizeKey) }
+
+func (c Config) PromptExtractPaths() []string {
+	return c.k.Strings(ExtractPathsKey)
+}
 
 func (c Config) MinScore() *int {
 	if c.k.Exists(MinScoreKey) {

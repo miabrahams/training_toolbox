@@ -40,6 +40,9 @@ prompt_db:
   path:
   data_dir:
 
+extract_paths:
+  - "/mdt/d/output"
+
 caption_db:
   path:
 

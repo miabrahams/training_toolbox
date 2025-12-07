@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"training_toolbox/internal/config"
 	promptdb "training_toolbox/internal/database/prompts"
 	"training_toolbox/internal/parser"
 
@@ -39,10 +40,19 @@ type promptDB interface {
 }
 
 func run() error {
+	fromConfig := flag.String("config", "", "Path to config file")
 	file := flag.String("file", "", "Path to a PNG file")
 	dir := flag.String("dir", "", "Path to a directory containing PNG files")
 	dbpath := flag.String("db", "", "Path to a sqlite or duckdb database (use .sqlite/.db for SQLite, .duckdb for DuckDB)")
 	flag.Parse()
+
+	if fromConfig != nil && *fromConfig != "" {
+		cfg, err := config.LoadConfig(*fromConfig)
+		if err != nil {
+			return fmt.Errorf("load config: %w", err)
+		}
+		return parseDirectoriesFromConfig(cfg, dbpath)
+	}
 
 	if *file == "" && *dir == "" {
 		flag.Usage()
@@ -57,6 +67,19 @@ func run() error {
 		return parseFileCommand(*file)
 	}
 	return parseDirectoryCommand(*dir, dbpath)
+}
+
+func parseDirectoriesFromConfig(cfg config.Config, dbpath *string) error {
+	paths := cfg.PromptExtractPaths()
+	if len(paths) == 0 {
+		return fmt.Errorf("no directories specified in config for prompt extraction")
+	}
+	for _, dir := range paths {
+		if err := parseDirectoryCommand(dir, dbpath); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func parseFileCommand(file string) error {
