@@ -1,0 +1,38 @@
+version: "3.0"
+name: "Old Comfyui Win"
+comment: Some nodes used conditioning_averages. Used multiple loaders, would need to examine Prompt to find which one is used.
+roles:
+  checkpoint:
+    node_id: 102
+    node_type: "Checkpoint Loader"
+    inputs:
+      ckpt_name: text
+  positive:
+    node_id: 98
+    node_type: "CLIPTextEncode"
+    inputs:
+      text: text
+  sampler:
+    node_id: 54
+    node_type: "KSampler"
+    inputs:
+      steps: int
+      cfg: float
+      sampler_name: text
+      scheduler: text
+  latent:
+    node_id: 6
+    node_type: "EmptyLatentImage"
+    inputs:
+      width: int
+      height: int
+
+outputs:
+  positive_prompt: [positive, text]
+  checkpoint: [checkpoint, ckpt_name]
+  steps: [sampler, steps]
+  cfg: [sampler, cfg]
+  sampler_name: [sampler, sampler_name]
+  scheduler: [sampler, scheduler]
+  width: [latent, width]
+  height: [latent, height]
