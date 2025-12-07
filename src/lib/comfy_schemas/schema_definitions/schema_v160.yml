@@ -1,0 +1,49 @@
+version: "1.60"
+name: "Pony raw setup with CustomAdvanced"
+comment: No group nodes
+roles:
+  checkpoint:
+    node_id: 72
+    node_type: "CheckpointLoaderSimple"
+    inputs:
+      ckpt_name: text
+  seed:
+    node_id: 32
+    node_type: "RandomNoise"
+    inputs:
+      noise_seed: int
+  positive:
+    node_id: 65
+    node_type: "CLIPTextEncode"
+    inputs:
+      text: text
+  loras:
+    node_id: 92
+    node_type: "Power Prompt (rgthree)"
+    inputs:
+      prompt: text
+  guider:
+    node_id: 17
+    node_type: "CFGGuider"
+    inputs:
+      cfg: float
+  scheduler:
+    node_id: 16
+    inputs:
+      steps: int
+  latent:
+    node_id: 61
+    node_type: "EmptyLatentImage"
+    inputs:
+      width: int
+      height: int
+
+outputs:
+  positive_prompt: [positive, text]
+  checkpoint: [checkpoint, ckpt_name]
+  seed: [seed, noise_seed]
+  loras: [loras, prompt]
+  steps: [scheduler, steps]
+  cfg: [guider, cfg]
+  width: [latent, width]
+  height: [latent, height]

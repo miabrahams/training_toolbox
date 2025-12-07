@@ -21,7 +21,7 @@ roles:
     node_id: 448
     node_type: "CR Prompt Text"
     inputs:
-      prompt: text
+      prompt: optional_text
   loras:
     node_id: 340
     node_type: "Power Prompt (rgthree)"

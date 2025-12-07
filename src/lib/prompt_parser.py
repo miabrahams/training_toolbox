@@ -114,7 +114,6 @@ def parse_prompt_attention(text):
 def extract_loras(prompt: str) -> List[str]:
     """Extract LoRA tags from a prompt. Returns full markup like <lora:a.safetensors:0.6>."""
     loras = re.findall(r'<lora:([^>:]+)(:[^>]+)?>', prompt)
-    for lora in loras: print(lora)
     return [f"<lora:{lora[0]}{lora[1] if lora[1] else ''}>" for lora in loras]
 
 def strip_lora_markup(prompt: str) -> str:

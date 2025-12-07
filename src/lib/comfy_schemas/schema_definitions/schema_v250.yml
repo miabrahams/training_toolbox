@@ -1,16 +1,12 @@
-version: "4.50"
-name: "Illustrious"
+version: "2.50"
+name: "IndigoFurryXL with old nodes. Seed was a primitive instead of CR"
+Comment:
 roles:
   checkpoint:
-    node_id: 474
+    node_id: 173
     node_type: "CheckpointLoaderSimple"
     inputs:
       ckpt_name: text
-  seed:
-    node_id: 463
-    node_type: "CR Seed"
-    inputs:
-      seed: int
   positive:
     node_id: 340
     node_type: "Power Prompt (rgthree)"
@@ -34,6 +30,11 @@ roles:
       cfg: float
       sampler_name: text
       scheduler: text
+  ksampler:
+    node_id: 70
+    node_type: KSampler
+    inputs:
+      seed: int
   aspect_ratio:
     node_id: 346
     node_type: "CR SDXL Aspect Ratio"
@@ -43,10 +44,10 @@ roles:
 
 outputs:
   positive_prompt: [positive, prompt]
-  checkpoint: [checkpoint, ckpt_name]
-  seed: [seed, seed]
-  loras: [loras, prompt]
   negative_prompt: [negative, prompt]
+  checkpoint: [checkpoint, ckpt_name]
+  seed: [ksampler, seed]
+  loras: [loras, prompt]
   steps: [sampler, steps_total]
   cfg: [sampler, cfg]
   sampler_name: [sampler, sampler_name]

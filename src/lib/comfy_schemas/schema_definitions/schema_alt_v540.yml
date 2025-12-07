@@ -1,6 +1,6 @@
-version: "5.0"
+version: "5.40"
 name: "Illustrious"
-comment: Older Load Image for IPAdapter
+comment: Alternate CRPromptText positive encoding
 roles:
   checkpoint:
     node_id: 474
@@ -13,10 +13,10 @@ roles:
     inputs:
       seed: int
   positive:
-    node_id: 553
-    node_type: "PCLazyTextEncode"
+    node_id: 592
+    node_type: "CR Prompt Text"
     inputs:
-      text: text
+      prompt: text
   negative:
     node_id: 448
     node_type: "CR Prompt Text"
@@ -42,6 +42,7 @@ roles:
       aspect_ratio: text
       swap_dimensions: bool
 
+  # These were disabled in the current prompt so aren't working in the test.
   ip_toggle:
     node_id: 570
     node_type: "PrepImageForClipVision"
@@ -53,9 +54,9 @@ roles:
     inputs:
       weight: float
   ip_image:
-    node_id: 568
+    node_id: 572
     optional_group: ip_adapter
-    node_type: "LoadImage"
+    node_type: "Load image with metadata [Crystools]"
     inputs:
       image: text
   rescale_cfg:
@@ -68,7 +69,7 @@ roles:
     node_type: "PerpNegGuider"
 
 outputs:
-  positive_prompt: [positive, text]
+  positive_prompt: [positive, prompt]
   checkpoint: [checkpoint, ckpt_name]
   seed: [seed, seed]
   loras: [loras, prompt]

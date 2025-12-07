@@ -1,9 +1,10 @@
-version: "3.0"
+version: "3.50"
 name: "Illustrious"
+Comment: This was never tested??
 roles:
   checkpoint:
     node_id: 474
-    node_type: "Checkpoint Loader"
+    node_type: "CheckpointLoaderSimple"
     inputs:
       ckpt_name: text
   seed:
@@ -14,6 +15,11 @@ roles:
   positive:
     node_id: 553
     node_type: "PCLazyTextEncode"
+    inputs:
+      text: text
+  negative:
+    node_id: 1
+    node_type: "CR Prompt What"
     inputs:
       text: text
   loras:

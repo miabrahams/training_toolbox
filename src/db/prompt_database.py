@@ -166,7 +166,7 @@ class PromptDatabase:
                 .outerjoin(pt, p.file_path == pt.file_path)
                 .where((pt.file_path.is_(None)) | (pt.processed.is_(None)) | (pt.processed == 0))
             )
-            return [(fp, pr) for fp, pr in session.execute(stmt).all()]
+            return [(fp, pr) for fp, pr in session.execute(stmt).all()][::-1] # reverse for latest first
 
     def upsert_prompt_text(self, file_path: str, prompt: ExtractedPrompt, **extras):
         """Upsert core prompt fields; extras may include any PromptText columns."""

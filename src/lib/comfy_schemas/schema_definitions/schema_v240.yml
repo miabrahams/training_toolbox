@@ -1,39 +1,36 @@
-version: "4.50"
-name: "Illustrious"
+version: "2.50"
+name: "PonyXL with new nodes, no color in power prompt and primitives for ksampler params"
+comment: this is where that stupid CLIP Text Encode garbage came from!!
 roles:
   checkpoint:
-    node_id: 474
+    node_id: 173
     node_type: "CheckpointLoaderSimple"
     inputs:
       ckpt_name: text
-  seed:
-    node_id: 463
-    node_type: "CR Seed"
-    inputs:
-      seed: int
   positive:
     node_id: 340
     node_type: "Power Prompt (rgthree)"
     inputs:
       prompt: strip_loras
   negative:
-    node_id: 448
-    node_type: "CR Prompt Text"
+    node_id: 7
+    node_type: "CLIPTextEncode"
     inputs:
-      prompt: optional_text
+      text: optional_text
   loras:
     node_id: 340
     node_type: "Power Prompt (rgthree)"
     inputs:
       prompt: extract_loras
-  sampler:
-    node_id: 445
-    node_type: "KSampler Config (rgthree)"
+  ksampler:
+    node_id: 70
+    node_type: "KSampler"
     inputs:
-      steps_total: int
+      steps: int
       cfg: float
       sampler_name: text
       scheduler: text
+      seed: int
   aspect_ratio:
     node_id: 346
     node_type: "CR SDXL Aspect Ratio"
@@ -43,13 +40,13 @@ roles:
 
 outputs:
   positive_prompt: [positive, prompt]
+  negative_prompt: [negative, text]
   checkpoint: [checkpoint, ckpt_name]
-  seed: [seed, seed]
+  seed: [ksampler, seed]
   loras: [loras, prompt]
-  negative_prompt: [negative, prompt]
-  steps: [sampler, steps_total]
-  cfg: [sampler, cfg]
-  sampler_name: [sampler, sampler_name]
-  scheduler: [sampler, scheduler]
+  steps: [ksampler, steps]
+  cfg: [ksampler, cfg]
+  sampler_name: [ksampler, sampler_name]
+  scheduler: [ksampler, scheduler]
   aspect_ratio: [aspect_ratio, aspect_ratio]
   swap_dimensions: [aspect_ratio, swap_dimensions]
