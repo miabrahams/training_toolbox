@@ -40,6 +40,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Set, Tuple
 
+from functools import lru_cache
 import yaml
 from pydantic import ValidationError
 
@@ -89,6 +90,7 @@ def _as_str(value: Any) -> str:
     return str(value) if value is not None else ""
 
 
+@lru_cache(maxsize=32)
 def _load_schema(schema_path: str | Path) -> SchemaSpec:
     """Load and validate the YAML schema from disk.
 

@@ -1,5 +1,5 @@
 version: "ext-103"
-name: "Positive got new node"
+name: "Weird setup with slerp latents"
 comment:
 roles:
   checkpoint:
@@ -18,8 +18,8 @@ roles:
     inputs:
       text: text
   sampler:
-    node_id: 5
-    node_type: "KSampler"
+    node_id: 50
+    node_type: "KSamplerAdvanced"
     inputs:
       steps: int
       cfg: float
